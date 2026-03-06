@@ -20,3 +20,6 @@ Saves Rust/Cargo registry, git cache, and build artifacts to GitHub Actions cach
 
 ### print_contexts
 Utility action for debugging that prints various GitHub Actions contexts (github, env, vars, job, runner, secrets, strategy, matrix, needs, inputs, steps) as JSON output in collapsible groups.
+
+### rust-toolchain
+Automatically installs the Rust toolchain based on your project's `rust-toolchain.toml` configuration. Extracts the toolchain channel, targets, and components from the config file and applies them using the dtolnay/rust-toolchain action.
