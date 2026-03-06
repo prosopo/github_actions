@@ -1,5 +1,11 @@
 name: "restore_cargo_cache"
 
+inputs:
+  restore-on-self-hosted:
+    description: "Whether to restore cache on self-hosted runners"
+    required: false
+    default: "false"
+
 runs:
     using: "composite"
     steps:
@@ -14,7 +20,7 @@ runs:
           mkdir -p target
 
       - name: Restore cache
-        if: ${{ runner.environment != 'self-hosted' }} # don't restore cache on self-hosted runners, network speed not good enough
+        if: ${{ runner.environment != 'self-hosted' || inputs.restore-on-self-hosted == 'true' }}
         uses: actions/cache/restore@v4
         with:
             # must restore all cache dirs, and they must exist ahead of this!
