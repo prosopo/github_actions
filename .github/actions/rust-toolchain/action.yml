@@ -1,0 +1,29 @@
+name: "rust-toolchain"
+
+runs:
+    using: "composite"
+    steps:
+
+      - name: Read rust-toolchain configuration
+        id: rust-toolchain
+        run: |
+          # Extract values from rust-toolchain.toml
+          TOOLCHAIN=$(grep 'channel =' rust-toolchain.toml | sed 's/.*= "\(.*\)"/\1/' | tr -d '"')
+          TARGETS=$(grep 'targets =' rust-toolchain.toml | sed 's/.*= \[\(.*\)\]/\1/' | tr -d '[]"' | tr ',' '\n' | xargs | tr ' ' ',')
+          COMPONENTS=$(grep 'components =' rust-toolchain.toml | sed 's/.*= \[\(.*\)\]/\1/' | tr -d '[]"' | tr ',' '\n' | xargs | tr ' ' ',')
+
+          # Print the extracted values
+          echo "Toolchain: $TOOLCHAIN"
+          echo "Targets: $TARGETS"
+          echo "Components: $COMPONENTS"
+
+          # Set outputs for use in subsequent steps
+          echo "toolchain=$TOOLCHAIN" >> $GITHUB_OUTPUT
+          echo "targets=$TARGETS" >> $GITHUB_OUTPUT
+          echo "components=$COMPONENTS" >> $GITHUB_OUTPUT
+
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ steps.rust-toolchain.outputs.toolchain }}
+          targets: ${{ steps.rust-toolchain.outputs.targets }}
+          components: ${{ steps.rust-toolchain.outputs.components }}
