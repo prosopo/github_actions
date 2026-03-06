@@ -6,6 +6,7 @@ runs:
 
       - name: Read rust-toolchain configuration
         id: rust-toolchain
+        shell: bash
         run: |
           # Extract values from rust-toolchain.toml
           TOOLCHAIN=$(grep 'channel =' rust-toolchain.toml | sed 's/.*= "\(.*\)"/\1/' | tr -d '"')
