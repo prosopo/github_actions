@@ -10,6 +10,8 @@ runs:
         run: |
           mkdir -p ~/.npm
           mkdir -p ~/.cache/Cypress
+          mkdir -p .turbo
+          mkdir -p .nx
 
       # checks the cache is valid and compresses it
       - name: Verify npm cache
@@ -23,6 +25,8 @@ runs:
             path: |
               ~/.npm
               ~/.cache/Cypress
+              .turbo
+              .nx
             key: npm-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Cleanup npm caches
