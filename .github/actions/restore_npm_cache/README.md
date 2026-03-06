@@ -12,7 +12,7 @@ Restores npm, Cypress, Turbo, and Nx caches from GitHub Actions cache storage.
 ## Usage
 
 ```yaml
-- uses: prosopo/captcha/.github/actions/restore_npm_cache@gha
+- uses: prosopo/github_actions/.github/actions/restore_npm_cache@gha
 ```
 
 ## Inputs

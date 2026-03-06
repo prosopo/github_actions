@@ -12,7 +12,7 @@ Saves npm, Cypress, Turbo, and Nx caches to GitHub Actions cache storage.
 ## Usage
 
 ```yaml
-- uses: prosopo/captcha/.github/actions/save_npm_cache@gha
+- uses: prosopo/github_actions/.github/actions/save_npm_cache@gha
 ```
 
 ## Inputs

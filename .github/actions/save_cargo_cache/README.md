@@ -11,7 +11,7 @@ Saves Rust/Cargo registry, git cache, and build artifacts to GitHub Actions cach
 ## Usage
 
 ```yaml
-- uses: prosopo/captcha/.github/actions/save_cargo_cache@gha
+- uses: prosopo/github_actions/.github/actions/save_cargo_cache@gha
 ```
 
 ## Inputs

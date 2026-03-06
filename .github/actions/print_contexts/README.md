@@ -23,7 +23,7 @@ Each context is printed in a collapsible group for easy reading in GitHub Action
 ## Usage
 
 ```yaml
-- uses: prosopo/captcha/.github/actions/print_contexts@gha
+- uses: prosopo/github_actions/.github/actions/print_contexts@gha
   with:
     INPUTS_CONTEXT: ${{ toJson(inputs) }}
     NEEDS_CONTEXT: ${{ toJson(needs) }}

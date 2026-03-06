@@ -13,7 +13,7 @@ Restores Rust/Cargo registry, git cache, and build artifacts from GitHub Actions
 ## Usage
 
 ```yaml
-- uses: prosopo/captcha/.github/actions/restore_cargo_cache@gha
+- uses: prosopo/github_actions/.github/actions/restore_cargo_cache@gha
 ```
 
 ## Inputs
@@ -45,7 +45,7 @@ This action produces no outputs.
 ## Example with self-hosted cache restoration
 
 ```yaml
-- uses: prosopo/captcha/.github/actions/restore_cargo_cache@gha
+- uses: prosopo/github_actions/.github/actions/restore_cargo_cache@gha
   with:
     restore-on-self-hosted: 'true'
 ```

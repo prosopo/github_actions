@@ -12,7 +12,7 @@ Sets up Node.js environment and manages npm dependencies.
 ## Usage
 
 ```yaml
-- uses: prosopo/captcha/.github/actions/npm@gha
+- uses: prosopo/github_actions/.github/actions/npm@gha
   with:
     npm_ci: true
     npm_ci_args: '--legacy-peer-deps'
