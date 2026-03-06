@@ -1,0 +1,39 @@
+name: "save_cargo_cache"
+
+runs:
+    using: "composite"
+    steps:
+
+      # dirs must exist before cache restore
+      - name: Make dirs
+        shell: bash
+        run: |
+          mkdir -p ~/.cargo
+          mkdir -p ~/.cargo/registry
+          mkdir -p ~/.cargo/git
+          mkdir -p target
+
+      - name: Save cargo cache
+        uses: actions/cache/save@v4
+        with:
+            path: |
+              ~/.cargo/registry
+              ~/.cargo/git
+              target
+              **/target
+              !**/target/**/target
+            key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Cleanup cargo caches
+        shell: bash
+        run: |
+            # remove all but the latest cache, leaving only the cache we just saved
+            echo "Fetching list of cache key"
+            cacheKeys=$(gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "cargo-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +3)
+            echo caches to be removed:
+            echo "${cacheKeys}"
+            set +e
+            for cacheKey in $cacheKeys
+            do
+                gh cache delete "$cacheKey" -R "${{ github.repository }}"
+            done
