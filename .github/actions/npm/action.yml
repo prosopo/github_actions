@@ -24,7 +24,7 @@ runs:
         with:
           node-version-file: 'package.json'
 
-      - uses: prosopo/github_actions/.github/actions/restore_npm_cache@gha
+      - uses: prosopo/github_actions/.github/actions/restore_npm_cache@main
         if: ${{ inputs.restore_npm_cache }}
 
       - name: install npm
