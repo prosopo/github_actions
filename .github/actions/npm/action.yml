@@ -24,7 +24,8 @@ runs:
         with:
           node-version-file: 'package.json'
 
-      - uses: prosopo/github_actions/.github/actions/restore_npm_cache@main
+      - id: cache
+        uses: prosopo/github_actions/.github/actions/restore_npm_cache@main
         if: ${{ inputs.restore_npm_cache }}
 
       - name: install npm
@@ -34,8 +35,18 @@ runs:
 # Commented until npm fixes itself https://github.com/npm/cli/issues/8757
 # npm i -g "npm@$(jq -r '.engines.npm // "latest"' < package.json)"
 
+      # Skip `npm ci` when node_modules was restored from an exact-lockfile cache hit: the tree
+      # already matches the lockfile, and `npm ci` would only delete it and reinstall the identical
+      # tree (~2 min wasted). On a cache miss (or when caching is disabled) the output is not 'true'
+      # and `npm ci` runs as normal, so this is always safe.
       - name: install project
         shell: bash
-        if: ${{ inputs.npm_ci }}
+        if: ${{ inputs.npm_ci && steps.cache.outputs.node-modules-cache-hit != 'true' }}
         run: |
           npm ci ${{ inputs.npm_ci_args }}
+
+      - name: skipped install (node_modules cache hit)
+        shell: bash
+        if: ${{ inputs.npm_ci && steps.cache.outputs.node-modules-cache-hit == 'true' }}
+        run: |
+          echo "node_modules restored from exact-lockfile cache hit; skipping 'npm ci'."

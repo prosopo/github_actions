@@ -29,12 +29,38 @@ runs:
               .nx/cache
             key: npm-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
 
+      # node_modules is saved under an EXACT lockfile-hash key (matching restore_npm_cache) so that
+      # lockfile-unchanged consumers get an exact hit and can skip `npm ci`. The key is stable across
+      # runs while the lockfile is unchanged, so actions/cache/save is a no-op (warns, doesn't fail)
+      # once the cache for a given lockfile already exists.
+      - name: Save node_modules cache
+        uses: actions/cache/save@v4
+        with:
+            path: |
+              **/node_modules
+            key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/package-lock.json') }}
+
       - name: Cleanup npm caches
         shell: bash
         run: |
             # remove all but the latest cache, leaving only the cache we just saved
             echo "Fetching list of cache key"
             cacheKeys=$(gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "npm-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +3)
+            echo caches to be removed:
+            echo "${cacheKeys}"
+            set +e
+            for cacheKey in $cacheKeys
+            do
+                gh cache delete "$cacheKey" -R "${{ github.repository }}"
+            done
+
+      - name: Cleanup node_modules caches
+        shell: bash
+        run: |
+            # node_modules caches are keyed by lockfile hash, so stale hashes accumulate as the
+            # lockfile changes. Keep only the most recent (the one we just saved) and remove the rest.
+            echo "Fetching list of node_modules cache keys"
+            cacheKeys=$(gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "node-modules-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +2)
             echo caches to be removed:
             echo "${cacheKeys}"
             set +e

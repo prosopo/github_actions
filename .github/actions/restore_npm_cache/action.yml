@@ -6,6 +6,11 @@ inputs:
     required: false
     default: "false"
 
+outputs:
+  node-modules-cache-hit:
+    description: "'true' when the node_modules cache was hit exactly (lockfile unchanged). When 'true', node_modules is already populated for the current lockfile and `npm ci` can be skipped (running it would only wipe and recreate the identical tree)."
+    value: ${{ steps.restore-node-modules.outputs.cache-hit }}
+
 runs:
     using: "composite"
     steps:
@@ -37,3 +42,19 @@ runs:
             key: some-unused-cache-key
             restore-keys: |
                 npm-${{ runner.os }}-${{ runner.arch }}-
+
+      # node_modules is cached separately from the npm/turbo/nx caches above because it needs the
+      # OPPOSITE matching behaviour: an EXACT match on the lockfile hash only, never a fuzzy fallback.
+      # A node_modules tree from a different lockfile would be wrong, so there is deliberately no
+      # restore-keys here. On an exact hit the consumer skips `npm ci` entirely (it would only wipe
+      # and recreate the identical tree); on a miss the consumer falls back to `npm ci`, which is
+      # also why a miss is always safe. The cache is populated by save_npm_cache (run on main), so
+      # lockfile-unchanged PRs hit; lockfile-changing PRs miss until main re-primes after merge.
+      - name: Restore node_modules
+        id: restore-node-modules
+        if: ${{ runner.environment != 'self-hosted' || inputs.restore-on-self-hosted == 'true' }}
+        uses: actions/cache/restore@v4
+        with:
+            path: |
+                **/node_modules
+            key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/package-lock.json') }}
