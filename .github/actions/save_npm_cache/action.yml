@@ -10,8 +10,6 @@ runs:
         run: |
           mkdir -p ~/.npm
           mkdir -p ~/.cache/Cypress
-          mkdir -p .turbo/cache
-          mkdir -p .nx/cache
 
       # checks the cache is valid and compresses it
       - name: Verify npm cache
@@ -22,11 +20,11 @@ runs:
       - name: Save npm cache
         uses: actions/cache/save@v4
         with:
+            # npm-ecosystem install state only (npm cache + Cypress binary).
+            # Build outputs (turbo) are saved separately by save_turbo_cache.
             path: |
               ~/.npm
               ~/.cache/Cypress
-              .turbo/cache
-              .nx/cache
             key: npm-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Cleanup npm caches

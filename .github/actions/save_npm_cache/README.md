@@ -1,18 +1,20 @@
 # save_npm_cache
 
-Saves npm, Cypress, Turbo, and Nx caches to GitHub Actions cache storage.
+Saves the npm-ecosystem install cache (npm package cache + Cypress binary) to GitHub Actions cache storage.
+
+Build outputs (turbo) are saved separately — see `save_turbo_cache`. They are kept apart because turbo invalidates on (almost) every commit, whereas this cache only changes when the lockfile does; bundling them would force the stable npm cache to be re-uploaded on every run.
 
 ## What it does
 
-- Creates cache directories with proper structure (`~/.npm`, `~/.cache/Cypress`, `.turbo/cache`, `.nx/cache`)
+- Creates cache directories (`~/.npm`, `~/.cache/Cypress`)
 - Verifies npm cache integrity with `npm cache verify`
-- Saves cached npm packages, Cypress binaries, and build tool caches using `actions/cache/save@v4`
+- Saves cached npm packages and the Cypress binary using `actions/cache/save@v4`
 - Automatically cleans up old caches, keeping only the latest one to manage storage
 
 ## Usage
 
 ```yaml
-- uses: prosopo/github_actions/.github/actions/save_npm_cache@gha
+- uses: prosopo/github_actions/.github/actions/save_npm_cache@main
 ```
 
 ## Inputs
@@ -27,8 +29,6 @@ This action produces no outputs.
 
 - `~/.npm` - npm package cache
 - `~/.cache/Cypress` - Cypress binary cache
-- `.turbo/cache` - Turbo build cache
-- `.nx/cache` - Nx build cache
 
 ## Cache cleanup
 
@@ -43,5 +43,5 @@ Cache keys are based on:
 ## Notes
 
 - Cache verification ensures the saved cache is valid before cleanup
-- This action should be used in the final step of a workflow to capture build artifacts for future runs
+- This action should be used in the final step of a workflow to capture install artifacts for future runs
 - Self-hosted runners can also use this action (unlike restore, which skips them)
