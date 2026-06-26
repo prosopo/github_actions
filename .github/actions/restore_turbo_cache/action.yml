@@ -1,0 +1,34 @@
+name: "restore_turbo_cache"
+
+inputs:
+  restore-on-self-hosted:
+    description: "Whether to restore the turbo cache on self-hosted runners"
+    required: false
+    default: "false"
+
+runs:
+    using: "composite"
+    steps:
+
+      # dir must exist before cache restore
+      - name: Make dirs
+        shell: bash
+        run: |
+          mkdir -p .turbo
+
+      - name: Restore cache
+        if: ${{ runner.environment != 'self-hosted' || inputs.restore-on-self-hosted == 'true' }} # don't restore cache on self-hosted runners by default
+        uses: actions/cache/restore@v4
+        with:
+            # turbo build outputs only — kept separate from the npm cache because
+            # these invalidate on (almost) every commit, while the npm cache only
+            # changes when the lockfile does. Bundling them would force the stable
+            # npm cache to be re-uploaded on every run.
+            path: |
+                .turbo
+            # set the key to an unused value so it always falls back to the wildcard
+            # selector in restore-keys (see restore_npm_cache for why the trailing
+            # '-' matters). The most recent turbo cache for this os/arch is restored.
+            key: some-unused-cache-key
+            restore-keys: |
+                turbo-${{ runner.os }}-${{ runner.arch }}-

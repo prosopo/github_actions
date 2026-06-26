@@ -1,0 +1,34 @@
+name: "save_turbo_cache"
+
+runs:
+    using: "composite"
+    steps:
+
+      # dir must exist before cache save
+      - name: Make dirs
+        shell: bash
+        run: |
+          mkdir -p .turbo
+
+      - name: Save turbo cache
+        uses: actions/cache/save@v4
+        with:
+            # turbo build outputs only — see restore_turbo_cache for why this is
+            # kept separate from the npm cache.
+            path: |
+              .turbo
+            key: turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Cleanup turbo caches
+        shell: bash
+        run: |
+            # remove all but the latest cache, leaving only the cache we just saved
+            echo "Fetching list of cache key"
+            cacheKeys=$(gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "turbo-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +3)
+            echo caches to be removed:
+            echo "${cacheKeys}"
+            set +e
+            for cacheKey in $cacheKeys
+            do
+                gh cache delete "$cacheKey" -R "${{ github.repository }}"
+            done
