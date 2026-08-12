@@ -1,0 +1,64 @@
+name: lint
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Lets the workflow be run by hand, which is the only way to get a `check`
+  # result onto a branch that predates this file.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Named `check` deliberately: the `main` ruleset on this repo requires a status
+  # context of exactly that name. Until this workflow existed the repo reported
+  # no checks at all, so the required context could never be satisfied and every
+  # PR was permanently unmergeable.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # actionlint validates workflow files and shellchecks the `run:` blocks
+      # inside them. It does not look at composite action.yml files at all --
+      # that gap is what the shellcheck step below covers.
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+      - name: yamllint
+        run: |
+          pipx install yamllint
+          yamllint --strict .
+
+      # No toml in this repo today. Deliberate: rust-toolchain.toml, Cargo.toml
+      # and pyproject.toml all drive builds, and a malformed one fails late and
+      # confusingly, so the check exists before the first such file arrives.
+      - name: taplo (toml)
+        run: |
+          # Pinned, and not the "-full" asset: that variant is no longer
+          # published, so a `latest/download/taplo-full-...` URL 404s.
+          curl -fsSL https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86_64.gz \
+            | gunzip | sudo tee /usr/local/bin/taplo >/dev/null
+          sudo chmod +x /usr/local/bin/taplo
+          taplo lint
+          taplo fmt --check --diff
+
+      # Composite actions are the substance of this repo, so their embedded
+      # shell is the code most worth linting. The extractor rewrites `${{ ... }}`
+      # to a placeholder first: those expressions are not shell syntax and
+      # shellcheck otherwise reports parse errors on every file.
+      - name: shellcheck composite action steps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          pip install --quiet pyyaml
+          python3 .github/scripts/lint_composite_shell.py

@@ -1,0 +1,20 @@
+# Deliberately loose. The point of linting yaml here is to catch what actually
+# breaks a workflow -- duplicate keys, bad indentation, unparseable files --
+# not to enforce a house style on files that already work.
+extends: default
+
+rules:
+  # GitHub's own schema uses `on:`, which yamllint reads as the boolean true.
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+  line-length: disable
+  comments-indentation: disable
+  document-start: disable
+  # Existing action.yml files mix 2- and 4-space nesting; reformatting them is
+  # not what this change is for.
+  indentation: disable
+  braces:
+    max-spaces-inside: 1
+  empty-lines:
+    max: 2
