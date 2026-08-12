@@ -38,4 +38,7 @@ runs:
         shell: bash
         if: ${{ inputs.npm_ci }}
         run: |
+          # Unquoted on purpose: npm_ci_args is a list of flags and must word
+          # split into separate arguments.
+          # shellcheck disable=SC2086
           npm ci ${{ inputs.npm_ci_args }}

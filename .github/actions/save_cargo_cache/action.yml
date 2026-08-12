@@ -1,11 +1,26 @@
 name: "save_cargo_cache"
 
+# Every step is gated on runner type, mirroring restore_npm_cache /
+# restore_cargo_cache which already skip on self-hosted. Our self-hosted runners
+# are persistent (one long-lived VM taking job after job), so the cached
+# directories under $HOME survive between jobs and the upload is WAN traffic for
+# nothing. It is also not merely wasteful: the cleanup step below deletes every
+# key but the newest, so a cache saved on self-hosted hardware displaces the
+# ones the GitHub-hosted runners restore from.
+
+inputs:
+  save-on-self-hosted:
+    description: "Whether to save the cargo cache to the GitHub cache backend on self-hosted runners"
+    required: false
+    default: "false"
+
 runs:
     using: "composite"
     steps:
 
       # dirs must exist before cache restore
       - name: Make dirs
+        if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
         shell: bash
         run: |
           mkdir -p ~/.cargo
@@ -58,6 +73,7 @@ runs:
           echo "cargo cache pruned: ${before} MB -> ${after} MB"
 
       - name: Save cargo cache
+        if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
         uses: actions/cache/save@v4
         with:
             path: |
@@ -69,6 +85,7 @@ runs:
             key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Cleanup cargo caches
+        if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
         shell: bash
         run: |
             # remove all but the latest cache, leaving only the cache we just saved
