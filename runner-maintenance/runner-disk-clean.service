@@ -1,0 +1,16 @@
+# Nightly disk sweep for a self-hosted GitHub Actions runner.
+# Installed alongside runner-disk-clean.timer; see runner-disk-clean.sh for why
+# the sweep is age-based rather than a wipe.
+[Unit]
+Description=Reclaim disk on the GitHub Actions runner
+
+[Service]
+Type=oneshot
+# Runs as the runner's own user so it can only ever delete state that user
+# created -- not as root, which would happily remove anything the paths resolve to.
+User=actions-runner
+Environment=RUNNER_HOME=/opt/actions-runner
+ExecStart=/opt/actions-runner/runner-maintenance/runner-disk-clean.sh --scheduled
+# Cleanup is never urgent enough to slow a build that is running right now.
+Nice=19
+IOSchedulingClass=idle

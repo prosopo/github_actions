@@ -1,0 +1,16 @@
+# Nightly, not hourly: the sweep only removes state older than a week, so
+# running it more often finds nothing. The low-disk hook (see
+# runner-disk-clean.sh --if-low) is what handles a runner filling up mid-day.
+[Unit]
+Description=Nightly disk reclamation on the GitHub Actions runner
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# The fleet's runners would otherwise all sweep on the same minute; stagger so
+# they do not go IO-bound together if any share a host or storage backend.
+RandomizedDelaySec=30m
+# A runner that was powered off overnight still gets swept on next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
