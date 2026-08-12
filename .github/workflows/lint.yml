@@ -44,9 +44,11 @@ jobs:
       # confusingly, so the check exists before the first such file arrives.
       - name: taplo (toml)
         run: |
-          curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-full-linux-x86_64.gz \
-            | gunzip > /usr/local/bin/taplo
-          chmod +x /usr/local/bin/taplo
+          # Pinned, and not the "-full" asset: that variant is no longer
+          # published, so a `latest/download/taplo-full-...` URL 404s.
+          curl -fsSL https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86_64.gz \
+            | gunzip | sudo tee /usr/local/bin/taplo >/dev/null
+          sudo chmod +x /usr/local/bin/taplo
           taplo lint
           taplo fmt --check --diff
 
