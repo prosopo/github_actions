@@ -39,6 +39,17 @@ jobs:
           pipx install yamllint
           yamllint --strict .
 
+      # No toml in this repo today. Deliberate: rust-toolchain.toml, Cargo.toml
+      # and pyproject.toml all drive builds, and a malformed one fails late and
+      # confusingly, so the check exists before the first such file arrives.
+      - name: taplo (toml)
+        run: |
+          curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-full-linux-x86_64.gz \
+            | gunzip > /usr/local/bin/taplo
+          chmod +x /usr/local/bin/taplo
+          taplo lint
+          taplo fmt --check --diff
+
       # Composite actions are the substance of this repo, so their embedded
       # shell is the code most worth linting. The extractor rewrites `${{ ... }}`
       # to a placeholder first: those expressions are not shell syntax and
