@@ -30,14 +30,14 @@ runs:
             echo '${{ toJson(github) }}'
             echo "::endgroup::"
             EOF
-            
+
             echo "**** env ****"
             cat <<'EOF'
             echo "::group::env"
             echo '${{ toJson(env) }}'
             echo "::endgroup::"
             EOF
-            
+
             echo "**** vars ****"
             cat <<'EOF'
             echo "::group::vars"
