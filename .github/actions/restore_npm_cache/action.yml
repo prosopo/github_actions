@@ -25,7 +25,7 @@ runs:
           mkdir -p .nx
 
       - name: Restore cache
-        if: ${{ runner.environment != 'self-hosted' || inputs.restore-on-self-hosted == 'true' }} # don't restore cache on self-hosted runners by default
+        if: ${{ runner.environment != 'self-hosted' || inputs.restore-on-self-hosted == 'true' }}  # don't restore cache on self-hosted runners by default
         uses: actions/cache/restore@v4
         with:
             # must restore all cache dirs, and they must exist ahead of this!

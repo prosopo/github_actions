@@ -43,6 +43,9 @@ runs:
         shell: bash
         if: ${{ inputs.npm_ci && steps.cache.outputs.node-modules-cache-hit != 'true' }}
         run: |
+          # Unquoted on purpose: npm_ci_args is a list of flags and must word
+          # split into separate arguments.
+          # shellcheck disable=SC2086
           npm ci ${{ inputs.npm_ci_args }}
 
       - name: skipped install (node_modules cache hit)
