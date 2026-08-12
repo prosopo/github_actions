@@ -28,6 +28,50 @@ runs:
           mkdir -p ~/.cargo/git
           mkdir -p target
 
+      # Prune before saving, the way Swatinem/rust-cache does. Unpruned, this
+      # cache is most of a `target/` tree: on a local Protect checkout that is
+      # 17 GB, of which ~7.5 GB is incremental state and ~6 GB is deps/ with a
+      # dozen-odd link artifacts over 100 MB each. GitHub caps a repo's total
+      # cache at 10 GB and evicts LRU, so an oversized entry both fails to save
+      # and thrashes out every other repo cache -- the "delete all but the
+      # latest" step below is a symptom of that. It also costs disk on restore,
+      # which is what tips a hosted runner into ENOSPC before the build starts.
+      #
+      # Not delegating to Swatinem/rust-cache wholesale: it has no equivalent of
+      # the self-hosted gating in restore_cargo_cache, nor of this repo's
+      # run_id-keyed save + wildcard restore scheme.
+      - name: Prune cargo cache before saving
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          before=$(du -sm target ~/.cargo 2>/dev/null | awk '{s+=$1} END {print s+0}')
+
+          # Incremental state is per-machine and per-working-copy -- it cannot be
+          # reused by the runner that restores this, so it is pure upload weight.
+          # find, not a glob: `**` is not recursive without globstar, and nested
+          # workspaces keep their own target/ dirs.
+          find . -type d -name incremental -path "*/target/*" -prune -exec rm -rf {} + 2>/dev/null || true
+
+          # Extracted crate sources are regenerated from the .crate archives in
+          # registry/cache, which we do keep. Roughly halves the registry.
+          rm -rf ~/.cargo/registry/src 2>/dev/null || true
+
+          # The workspace's own artifacts are rebuilt on every run anyway (the
+          # source always differs), so caching them only ages the entry. The
+          # dependency artifacts they sit alongside are the whole point of the
+          # cache, so match on package name rather than clearing the directory.
+          if command -v cargo >/dev/null && command -v jq >/dev/null; then
+            for pkg in $(cargo metadata --no-deps --format-version 1 2>/dev/null | jq -r '.packages[].name' | tr '-' '_'); do
+              [ -n "$pkg" ] || continue
+              find target -maxdepth 3 \( -path "*/deps/*" -o -path "*/.fingerprint/*" -o -path "*/build/*" \) \
+                \( -name "$pkg" -o -name "$pkg-*" -o -name "lib$pkg-*" \) -exec rm -rf {} + 2>/dev/null || true
+            done
+          fi
+
+          after=$(du -sm target ~/.cargo 2>/dev/null | awk '{s+=$1} END {print s+0}')
+          echo "cargo cache pruned: ${before} MB -> ${after} MB"
+
       - name: Save cargo cache
         if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
         uses: actions/cache/save@v4
