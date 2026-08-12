@@ -1,0 +1,30 @@
+# Reclaims disk on GitHub-hosted runners by deleting the preloaded Docker
+# images. One action per ecosystem, deliberately: a workflow that does not use
+# Docker can call this and keep the toolchains it does use, instead of paying
+# for a monolithic "free disk space" step that deletes everything and costs
+# minutes.
+#
+# Hosted runners only. The self-hosted fleet is non-ephemeral, so a deletion
+# here is permanent and affects every later job on that machine -- including
+# jobs that need what was deleted. The guard is on every step, not on the
+# caller, so misuse is impossible rather than merely discouraged.
+
+name: "free_disk_space_docker"
+description: "Delete all preloaded Docker images from a GitHub-hosted runner (~4 GB)."
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: Remove preloaded Docker images
+      # Skipped on self-hosted: see the note at the top of this file.
+      if: ${{ runner.environment != 'self-hosted' }}
+      shell: bash
+      run: |
+        set -uo pipefail
+        before=$(df --output=avail -k / | tail -n1)
+        # Only safe before anything has been built or pulled: this removes every
+        # image on the runner, not just the preloaded ones.
+        sudo docker image prune --all --force || true
+        after=$(df --output=avail -k / | tail -n1)
+        echo "Remove preloaded Docker images: freed $(( (after - before) / 1024 )) MB, $(( after / 1024 / 1024 )) GB now free on /"
