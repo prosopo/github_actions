@@ -28,12 +28,31 @@ runs:
         uses: prosopo/github_actions/.github/actions/restore_npm_cache@main
         if: ${{ inputs.restore_npm_cache }}
 
+      # `npm i -g npm` upgrades npm by renaming the live npm directory out of the
+      # way to `.npm-<suffix>` and unpacking the new one in its place. The suffix
+      # is stable for a given path, not random, so an install killed part-way --
+      # a cancelled run, an agent restart -- leaves that directory behind, and
+      # every later install on the same agent fails the rename with ENOTEMPTY.
+      # The agent is then wedged for good: prosvr8-3 was left like that on
+      # 2026-09-24 and failed this step on every job it picked up for a day.
+      #
+      # Doing nothing when npm is already the version we want avoids the rename
+      # altogether, which on a self-hosted agent is every run after the first.
+      # Sweeping the leftovers covers the agents already holding one.
       - name: install npm
         shell: bash
+        # 11.6.3 cannot install a tree that uses `overrides`: npm/cli#8757.
+        # Read from package.json `engines.npm` again once that is released fixed.
+        env:
+          NPM_VERSION: "11.6.2"
         run: |
-          npm i -g "npm@11.6.2"
-# Commented until npm fixes itself https://github.com/npm/cli/issues/8757
-# npm i -g "npm@$(jq -r '.engines.npm // "latest"' < package.json)"
+          set -euo pipefail
+          if [ "$(npm -v)" = "$NPM_VERSION" ]; then
+            echo "npm $NPM_VERSION is already installed"
+            exit 0
+          fi
+          rm -rf "$(npm prefix -g)/lib/node_modules"/.npm-*
+          npm i -g "npm@$NPM_VERSION"
 
       # Skip `npm ci` when node_modules was restored from an exact-lockfile cache hit: the tree
       # already matches the lockfile, and `npm ci` would only delete it and reinstall the identical
