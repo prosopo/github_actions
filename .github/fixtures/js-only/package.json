@@ -1,0 +1,9 @@
+{
+	"name": "stage-workflows-fixture-js-only",
+	"private": true,
+	"description": "A JS-only repo for stage-workflows-selftest.yml: static.yml and test.yml must run their js job here and skip rust and python.",
+	"scripts": {
+		"lint": "node -e \"console.log('fixture lint ok')\"",
+		"test": "node -e \"console.log('fixture test ok')\""
+	}
+}

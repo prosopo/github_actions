@@ -1,0 +1,44 @@
+# Runs static.yml and test.yml against a JS-only fixture so a change to them is
+# exercised before other repos call them: the js job must pass and the rust and
+# python jobs must be skipped. Calls the local files, so a PR tests its own edits.
+
+name: stage-workflows-selftest
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/static.yml"
+      - ".github/workflows/test.yml"
+      - ".github/workflows/stage-workflows-selftest.yml"
+      - ".github/actions/detect-languages/**"
+      - ".github/fixtures/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    uses: ./.github/workflows/static.yml
+    with:
+      actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      working-directory: .github/fixtures/js-only
+      js-command: pnpm run lint
+      # Fail loudly if detection wrongly runs a language the fixture lacks.
+      rust-command: exit 1
+      python-command: exit 1
+
+  test:
+    uses: ./.github/workflows/test.yml
+    with:
+      actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      working-directory: .github/fixtures/js-only
+      js-command: pnpm run test
+      # Fail loudly if detection wrongly runs a language the fixture lacks.
+      rust-command: exit 1
+      python-command: exit 1

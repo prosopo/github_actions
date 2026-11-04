@@ -1,0 +1,67 @@
+# End-to-end tests for any repo. Restores build.yml's turbo cache, starts only
+# the services the repo defines in its own compose file (none if it has none),
+# then runs the repo's test:e2e turbo task. Called with workflow_call after build.
+
+name: e2e
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions whose actions this uses; pass the SHA the caller pins this workflow at (see cache-main.yml)."
+        type: string
+        required: true
+      runs-on: {description: "Runner label.", type: string, default: "ubuntu-latest"}
+      timeout-minutes: {description: "e2e job limit.", type: number, default: 60}
+      artifact-name: {description: "Turbo cache artifact from build.yml.", type: string, default: "turbo-cache"}
+      compose-file: {description: "Repo compose file defining the services e2e needs; skipped when absent.", type: string, default: "docker/docker-compose.test.yml"}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          submodules: recursive
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - uses: ./.shared-actions/.github/actions/setup-pnpm
+        timeout-minutes: 15
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        timeout-minutes: 10
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: .turbo-cache
+      - name: Start services
+        timeout-minutes: 10
+        env:
+          COMPOSE_FILE: ${{ inputs.compose-file }}
+        run: |
+          if [ -f "$COMPOSE_FILE" ]; then
+            timeout 540 docker compose -f "$COMPOSE_FILE" up -d --wait
+          else
+            echo "no $COMPOSE_FILE; starting no services"
+          fi
+      - name: turbo test:e2e
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        run: pnpm turbo run test:e2e --cache-dir=.turbo-cache
+      - name: Service logs
+        if: ${{ failure() }}
+        timeout-minutes: 3
+        env:
+          COMPOSE_FILE: ${{ inputs.compose-file }}
+        run: |
+          if [ -f "$COMPOSE_FILE" ]; then timeout 60 docker compose -f "$COMPOSE_FILE" logs --tail 200; fi

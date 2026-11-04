@@ -1,0 +1,36 @@
+# Outputs has-<lang> and <lang>-changed for js, rust, python and docker, so
+# stage workflows can skip jobs for languages a repo lacks or a change missed.
+# Needs a checkout with enough history to reach `base` (fetch-depth: 0).
+
+name: "detect-languages"
+description: "Report which languages the repo has and which the change touched."
+
+inputs:
+  base:
+    description: "Commit to diff against. Empty or all-zero treats every present language as changed."
+    required: false
+    default: ""
+  dir:
+    description: "Directory whose files are classified (a subtree of the repo)."
+    required: false
+    default: "."
+
+outputs:
+  has-js: {description: "Repo has JS/TS.", value: "${{ steps.detect.outputs.has-js }}"}
+  js-changed: {description: "Change touched JS/TS.", value: "${{ steps.detect.outputs.js-changed }}"}
+  has-rust: {description: "Repo has Rust.", value: "${{ steps.detect.outputs.has-rust }}"}
+  rust-changed: {description: "Change touched Rust.", value: "${{ steps.detect.outputs.rust-changed }}"}
+  has-python: {description: "Repo has Python.", value: "${{ steps.detect.outputs.has-python }}"}
+  python-changed: {description: "Change touched Python.", value: "${{ steps.detect.outputs.python-changed }}"}
+  has-docker: {description: "Repo has Dockerfiles.", value: "${{ steps.detect.outputs.has-docker }}"}
+  docker-changed: {description: "Change touched Dockerfiles.", value: "${{ steps.detect.outputs.docker-changed }}"}
+
+runs:
+  using: "composite"
+  steps:
+    - id: detect
+      shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+      working-directory: ${{ inputs.dir }}
+      run: timeout 120 python3 "$GITHUB_ACTION_PATH/detect_languages.py" --base "$BASE"

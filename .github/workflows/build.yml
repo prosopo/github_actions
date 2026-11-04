@@ -1,0 +1,50 @@
+# Builds every package once with turbo and uploads the turbo cache, so later
+# stages restore it instead of rebuilding. Called with workflow_call.
+
+name: build
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions whose actions this uses; pass the SHA the caller pins this workflow at (see cache-main.yml)."
+        type: string
+        required: true
+      runs-on: {description: "Runner label.", type: string, default: "ubuntu-latest"}
+      timeout-minutes: {description: "Build job limit.", type: number, default: 40}
+      artifact-name: {description: "Name of the uploaded turbo cache artifact.", type: string, default: "turbo-cache"}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          submodules: recursive
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - uses: ./.shared-actions/.github/actions/setup-pnpm
+        timeout-minutes: 15
+        with:
+          node-version-file: .nvmrc
+      - name: turbo build
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        run: pnpm turbo run build --cache-dir=.turbo-cache
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        timeout-minutes: 10
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: .turbo-cache
+          retention-days: 1
+          include-hidden-files: true
