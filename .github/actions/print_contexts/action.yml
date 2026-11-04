@@ -1,3 +1,7 @@
+# Debug aid: prints the workflow contexts as JSON in collapsed groups.
+# SECRETS_CONTEXT is echoed as given (GitHub masks registered secret values,
+# not derived ones), so leave it unset outside debugging.
+
 name: "print_contexts"
 
 inputs:

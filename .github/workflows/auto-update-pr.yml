@@ -1,0 +1,70 @@
+# Updates the branch of one random eligible auto-merge PR at a time, for repos
+# that require branches to be up to date before merging. Selection, the
+# stand-down rule and the label are explained in .github/scripts/auto_update_pr.py.
+#
+# Callers trigger it on:
+#   - workflow_run completed of their CI workflows (pass or fail): a pass frees
+#     the queue, a fail means the updated PR is out and another must be picked;
+#   - push to main: the PRs are now behind, and a labelled PR whose CI is still
+#     running gets cancelled and updated straight away;
+#   - cron `*/30 * * * *`: backstop for missed events (GitHub delays and drops
+#     scheduled runs under load, so it is a backstop, not the mechanism).
+# Never pull_request_target: nothing here needs PR context, and that trigger
+# runs with secrets on fork code.
+#
+# The update uses PROSOPONATOR_PAT (passed as update-token) because a push made
+# with GITHUB_TOKEN does not trigger the PR's CI.
+#
+# Callers set `concurrency: { group: auto-update-pr, cancel-in-progress: false }`
+# so two runs never update two PRs at once.
+
+name: auto-update-pr
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions holding the script; pass the SHA this workflow is pinned at (see cache-main.yml)."
+        type: string
+        required: true
+      base:
+        type: string
+        default: main
+      label:
+        type: string
+        default: auto-update
+      max-age-minutes:
+        description: "A check pending longer than this counts as hung, not busy."
+        type: number
+        default: 90
+    secrets:
+      update-token:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+
+      - name: Update one PR
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ secrets.update-token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ inputs.base }}
+          LABEL: ${{ inputs.label }}
+          EVENT: ${{ github.event_name }}
+          MAX_AGE: ${{ inputs.max-age-minutes }}
+        run: |
+          timeout 540 python3 .shared-actions/.github/scripts/auto_update_pr.py \
+            --repo "$REPO" --base "$BASE" --label "$LABEL" --event "$EVENT" --max-age-minutes "$MAX_AGE"

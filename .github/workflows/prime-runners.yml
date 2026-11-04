@@ -1,0 +1,175 @@
+# Fills every self-hosted runner VM's local caches from main: pnpm store,
+# cargo registry, Playwright browsers and the turbo build of main.
+#
+# Why: each VM keeps its own caches on disk between jobs
+# (https://github.com/prosopo/gh-runner) and never restores GitHub's cache, so
+# a VM that has not run a given job yet pays the full install and build on a
+# PR. One job per VM, pinned by that VM's unique `vm-*` label, warms them all.
+# Until the VM migration lands the hosts carry `host-*` labels instead, which
+# are used as a fallback (one job per host).
+#
+# When: callers trigger it on push to main and on a cron; see each caller.
+# fail-fast is off so one broken VM does not leave the rest cold.
+#
+# Needs a token that can list org runners (admin:org read), passed as
+# runners-token; the default GITHUB_TOKEN cannot.
+
+name: prime-runners
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions whose actions this uses; pass the SHA this workflow is pinned at (see cache-main.yml)."
+        type: string
+        required: true
+      label-prefix:
+        description: "Runner label naming one VM."
+        type: string
+        default: "vm-"
+      fallback-label-prefix:
+        description: "Used when no online runner has label-prefix."
+        type: string
+        default: "host-"
+      extra-labels:
+        description: "JSON array of further labels each job requires, e.g. capacity labels."
+        type: string
+        default: "[]"
+      submodules:
+        type: string
+        default: "false"
+      node-version:
+        type: string
+        default: ""
+      env:
+        description: "KEY=VALUE lines exported before building."
+        type: string
+        default: ""
+      setup-command:
+        type: string
+        default: ""
+      playwright-command:
+        description: "Installs Playwright browsers; empty skips."
+        type: string
+        default: ""
+      turbo-command:
+        description: "Builds main so the VM's turbo cache holds it; empty skips."
+        type: string
+        default: ""
+      cargo:
+        description: "Run cargo fetch when Cargo.lock exists."
+        type: boolean
+        default: true
+      timeout-minutes:
+        type: number
+        default: 60
+    secrets:
+      runners-token:
+        description: "Token that can list the org's runners."
+        required: true
+      checkout-token:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      labels: ${{ steps.list.outputs.labels }}
+    steps:
+      - id: list
+        name: List one label per online Linux runner VM
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ secrets.runners-token }}
+          ORG: ${{ github.repository_owner }}
+          PREFIX: ${{ inputs.label-prefix }}
+          FALLBACK: ${{ inputs.fallback-label-prefix }}
+        run: |
+          set -euo pipefail
+          runners=$(timeout 120 gh api --paginate "orgs/$ORG/actions/runners?per_page=100" --jq '.runners[]' | jq -s '.')
+          pick() {
+            jq -c --arg p "$1" '[.[] | select(.status == "online" and .os == "Linux")
+              | .labels[].name | select(startswith($p))] | unique' <<<"$runners"
+          }
+          labels=$(pick "$PREFIX")
+          if [ "$labels" = "[]" ]; then
+            echo "::notice::No online runner has a $PREFIX label; using $FALLBACK"
+            labels=$(pick "$FALLBACK")
+          fi
+          echo "labels=$labels"
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+
+  prime:
+    needs: list
+    if: ${{ needs.list.outputs.labels != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        label: ${{ fromJSON(needs.list.outputs.labels) }}
+    runs-on: ${{ fromJSON(format('["self-hosted","Linux","{0}"{1}]', matrix.label, inputs.extra-labels != '[]' && format(',"{0}"', join(fromJSON(inputs.extra-labels), '","')) || '')) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 10
+        with:
+          token: ${{ secrets.checkout-token || github.token }}
+          submodules: ${{ inputs.submodules }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+
+      - name: Export build environment
+        timeout-minutes: 1
+        env:
+          LINES: ${{ inputs.env }}
+        run: printf '%s\n' "$LINES" | sed '/^[[:space:]]*$/d' >> "$GITHUB_ENV"
+
+      # Install fills the VM's pnpm store; setup-pnpm also runs cache eviction first.
+      - uses: ./.shared-actions/.github/actions/setup-pnpm
+        timeout-minutes: 25
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Setup command
+        if: ${{ inputs.setup-command != '' }}
+        timeout-minutes: 10
+        env:
+          CMD: ${{ inputs.setup-command }}
+        run: timeout 540 bash -c "$CMD"
+
+      - name: Install Playwright browsers
+        if: ${{ inputs.playwright-command != '' }}
+        timeout-minutes: 15
+        env:
+          CMD: ${{ inputs.playwright-command }}
+        run: timeout 840 bash -c "$CMD"
+
+      - name: Check for a cargo workspace
+        id: cargo
+        timeout-minutes: 1
+        run: |
+          if [ -f Cargo.lock ]; then echo "present=true"; else echo "present=false"; fi >> "$GITHUB_OUTPUT"
+
+      - if: ${{ inputs.cargo && steps.cargo.outputs.present == 'true' }}
+        uses: ./.shared-actions/.github/actions/rust-toolchain
+        timeout-minutes: 10
+
+      - name: cargo fetch
+        if: ${{ inputs.cargo && steps.cargo.outputs.present == 'true' }}
+        timeout-minutes: 15
+        run: timeout 840 cargo fetch --locked
+
+      - name: Turbo build of main
+        if: ${{ inputs.turbo-command != '' }}
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        env:
+          CMD: ${{ inputs.turbo-command }}
+        run: bash -c "$CMD"

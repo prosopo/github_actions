@@ -1,3 +1,6 @@
+# Restores npm, Cypress, turbo and nx caches on hosted runners only (self-hosted
+# VMs keep them on disk). Legacy; new code uses restore-cache.
+
 name: "restore_npm_cache"
 
 inputs:

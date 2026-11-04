@@ -1,0 +1,54 @@
+# Keeps a self-hosted runner VM's local caches (pnpm store, cargo registry,
+# Playwright browsers, turbo) from growing until the disk fills. Those VMs keep
+# their caches between jobs (https://github.com/prosopo/gh-runner), so nothing
+# else ever evicts them. GitHub-hosted runners start empty, so this is a no-op
+# there.
+#
+# setup-pnpm and rust-toolchain call the script directly as their first step;
+# use this action for jobs that use neither. The stamp file makes every call
+# after the first in an hour free.
+
+name: "cache-maintenance"
+description: "Evict stale entries from a self-hosted runner's local caches; no-op on GitHub-hosted runners."
+
+inputs:
+  targets:
+    description: "Newline-separated `path:depth` list. Empty uses DEFAULT_TARGETS in cache_maintenance.py."
+    required: false
+    default: ""
+  max-age-days:
+    description: "Evict entries unused for this many days."
+    required: false
+    default: "14"
+  max-size-gb:
+    description: "Then evict oldest-first until the targets total less than this."
+    required: false
+    default: "60"
+  min-free-gb:
+    description: "And until the disk holding the first target has this much free."
+    required: false
+    default: "20"
+  interval-minutes:
+    description: "Skip when the last run was less than this long ago."
+    required: false
+    default: "60"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Evict stale cache entries
+      if: ${{ runner.environment == 'self-hosted' && runner.os == 'Linux' }}
+      shell: bash
+      env:
+        TARGETS: ${{ inputs.targets }}
+        MAX_AGE_DAYS: ${{ inputs.max-age-days }}
+        MAX_SIZE_GB: ${{ inputs.max-size-gb }}
+        MIN_FREE_GB: ${{ inputs.min-free-gb }}
+        INTERVAL_MINUTES: ${{ inputs.interval-minutes }}
+      # Bounded so a pathological store cannot hold the job; a timeout only
+      # skips eviction this time, it never fails the job.
+      run: |
+        timeout 600 python3 "$GITHUB_ACTION_PATH/cache_maintenance.py" \
+          --targets "$TARGETS" --max-age-days "$MAX_AGE_DAYS" --max-size-gb "$MAX_SIZE_GB" \
+          --min-free-gb "$MIN_FREE_GB" --interval-minutes "$INTERVAL_MINUTES" \
+          || echo "::warning::cache maintenance did not finish (exit $?)"

@@ -1,3 +1,6 @@
+# Counterpart of restore_npm_cache: verifies the npm cache, saves it, keeps
+# only the newest entry. Legacy; new code uses save-cache.
+
 name: "save_npm_cache"
 
 # Every step is gated on runner type, mirroring restore_npm_cache /

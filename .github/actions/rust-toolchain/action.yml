@@ -1,8 +1,23 @@
+# Installs the toolchain rust-toolchain.toml names, with its targets and
+# components, so CI and local builds cannot disagree. First evicts stale
+# entries from a self-hosted VM's caches (cache-maintenance), because cargo
+# builds are what fill those disks.
+
 name: "rust-toolchain"
 
 runs:
     using: "composite"
     steps:
+
+      # Runs before anything is installed so a full disk is freed before this
+      # job needs space. Sibling script, not `uses:`: a composite action can only
+      # reference another action at a fixed ref, which would drift from this one.
+      - name: Evict stale runner caches
+        if: ${{ runner.environment == 'self-hosted' && runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          timeout 600 python3 "$GITHUB_ACTION_PATH/../cache-maintenance/cache_maintenance.py" \
+            || echo "::warning::cache maintenance did not finish (exit $?)"
 
       - name: Read rust-toolchain configuration
         id: rust-toolchain

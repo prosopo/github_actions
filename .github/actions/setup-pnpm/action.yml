@@ -1,7 +1,9 @@
 # Node + pnpm + pnpm store cache + `pnpm install`, in the order every pnpm
 # workspace job needs them. Shared so the node/pnpm versions, store path and
 # cache key cannot drift between jobs and repos: a job that resolves the store
-# differently misses the cache another job primed.
+# differently misses the cache another job primed. On a self-hosted VM it first
+# evicts stale local cache entries (cache-maintenance); it never saves the store
+# (main's entry is written by cache-main.yml).
 
 name: "setup-pnpm"
 description: "Install node and pnpm, restore the pnpm store cache and run `pnpm install`."
@@ -79,6 +81,16 @@ outputs:
 runs:
   using: "composite"
   steps:
+
+    # Runs before anything is installed so a full disk is freed before this
+    # job needs space. Sibling script, not `uses:`: a composite action can only
+    # reference another action at a fixed ref, which would drift from this one.
+    - name: Evict stale runner caches
+      if: ${{ runner.environment == 'self-hosted' && runner.os == 'Linux' }}
+      shell: bash
+      run: |
+        timeout 600 python3 "$GITHUB_ACTION_PATH/../cache-maintenance/cache_maintenance.py" \
+          || echo "::warning::cache maintenance did not finish (exit $?)"
 
     - name: Resolve pnpm settings
       id: store-key

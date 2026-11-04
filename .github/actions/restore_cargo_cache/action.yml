@@ -1,3 +1,8 @@
+# Restores cargo registry, git and target from GitHub's cache on hosted
+# runners. Self-hosted runner VMs keep these on disk
+# (https://github.com/prosopo/gh-runner), so restoring there is skipped.
+# New code should use restore-cache, which supports the main/PR save rules.
+
 name: "restore_cargo_cache"
 
 inputs:

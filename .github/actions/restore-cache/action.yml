@@ -2,6 +2,16 @@
 # `<name>-<os>-<arch>-<hash of key-files><suffix>` and a miss falls back to the
 # newest `<name>-<os>-<arch>-` entry, so save-cache with the same name, key-files
 # and suffix writes exactly what this reads.
+#
+# Key what the entry is derived from, not what it contains: dependency caches
+# on the lockfile, build outputs (turbo, cargo target) on hashFiles of their
+# inputs (lockfiles, toolchain, config, source globs). A content hash cannot be
+# known before restoring, so it is only used afterwards (the `fingerprint`
+# output) to let save-cache skip re-uploading an unchanged tree.
+#
+# GitHub evicts entries not accessed for 7 days, and only a real restore counts
+# as access (a lookup-only does not), which is why cache-main.yml restores every
+# main entry on a timer.
 
 name: "restore-cache"
 description: "Restore a GitHub cache under the standard <name>-<os>-<arch>-<hash> key, with prefix fallback."
@@ -38,7 +48,15 @@ inputs:
     required: false
     default: "false"
 
+  fingerprint:
+    description: "Also output a fingerprint (paths, sizes, mtimes) of what was restored, for save-cache's restored-fingerprint."
+    required: false
+    default: "false"
+
 outputs:
+  fingerprint:
+    description: "Fingerprint of the restored paths when fingerprint is 'true'."
+    value: ${{ steps.fingerprint.outputs.fingerprint }}
   cache-hit:
     description: "'true' on an exact key match."
     value: ${{ steps.restore.outputs.cache-hit }}
@@ -83,3 +101,12 @@ runs:
         key: ${{ steps.key.outputs.key }}
         restore-keys: ${{ steps.key.outputs.restore-keys }}
         fail-on-cache-miss: ${{ inputs.fail-on-cache-miss }}
+
+    - name: Fingerprint restored paths
+      id: fingerprint
+      if: ${{ inputs.fingerprint == 'true' && steps.restore.outcome == 'success' }}
+      shell: bash
+      env:
+        PATHS: ${{ inputs.path }}
+      run: |
+        echo "fingerprint=$(python3 "$GITHUB_ACTION_PATH/../save-cache/fingerprint.py" --paths "$PATHS")" >> "$GITHUB_OUTPUT"
