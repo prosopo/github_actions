@@ -37,7 +37,7 @@ runs:
 
       - name: Save npm cache
         if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
             path: |
               ~/.npm
@@ -51,7 +51,7 @@ runs:
       # runs while the lockfile is unchanged, so actions/cache/save is a no-op (warns, doesn't fail)
       # once the cache for a given lockfile already exists.
       - name: Save node_modules cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
             path: |
               **/node_modules

@@ -20,12 +20,12 @@ runs:
     using: "composite"
     steps:
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version-file: 'package.json'
 
       - id: cache
-        uses: prosopo/github_actions/.github/actions/restore_npm_cache@main
+        uses: prosopo/github_actions/.github/actions/restore_npm_cache@1e2f6e3907aad18cd1497d93e722790b51c0c66a  # main
         if: ${{ inputs.restore_npm_cache }}
 
       # `npm i -g npm` upgrades npm by renaming the live npm directory out of the
