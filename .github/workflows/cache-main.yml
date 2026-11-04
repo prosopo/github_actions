@@ -1,0 +1,271 @@
+# Keeps main's GitHub caches present and alive for GitHub-hosted jobs.
+#
+# Why: PR runs restore from main's entries (an entry saved on a PR ref is only
+# visible to that PR), so main must hold the current pnpm store, Playwright
+# browsers, turbo and cargo outputs. GitHub evicts an entry after 7 days without
+# access and only a real restore counts as access (lookup-only does not), so
+# each entry is restored for real; a miss rebuilds and saves it.
+#
+# When: callers trigger it on push to main (new lockfile or sources mean new
+# keys) and on cron `17 */3 * * *`. Minute 17 because GitHub delays or drops
+# scheduled runs at the top of the hour; every 3 hours keeps entries well inside
+# the 7-day window even if several runs are dropped.
+#
+# Self-hosted runner VMs do not use these entries: they keep their own caches on
+# disk (https://github.com/prosopo/gh-runner) and are filled by prime-runners.yml.
+# Key scheme and save rules: restore-cache / save-cache in
+# https://github.com/prosopo/github_actions.
+#
+# Callers set `concurrency: { group: cache-main, cancel-in-progress: false }`
+# so a cron run cannot abort a rebuild halfway through its save.
+
+name: cache-main
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions whose actions this uses. Pass the SHA this workflow is pinned at: a called workflow cannot reliably read its own SHA (https://github.com/actions/runner/issues/2417), and a fixed `uses:` SHA inside it could never point at its own commit."
+        type: string
+        required: true
+      runs-on:
+        description: "JSON runs-on value for both jobs."
+        type: string
+        default: '"ubuntu-latest"'
+      submodules:
+        description: "actions/checkout submodules value."
+        type: string
+        default: "false"
+      node-version:
+        description: "Node version; empty uses packageManager/.nvmrc via setup-pnpm."
+        type: string
+        default: ""
+      env:
+        description: "KEY=VALUE lines exported before building (must match the PR jobs, or turbo hashes differ)."
+        type: string
+        default: ""
+      setup-command:
+        description: "Run after install and before any build, e.g. generating .env files."
+        type: string
+        default: ""
+      playwright-command:
+        description: "Installs Playwright browsers; empty skips the playwright cache."
+        type: string
+        default: ""
+      turbo-command:
+        description: "Builds the turbo graph PRs reuse; empty skips the turbo cache."
+        type: string
+        default: ""
+      turbo-key-files:
+        description: "Globs of everything the turbo outputs derive from. Must not match anything the install or build writes, or save keys differ from restore keys."
+        type: string
+        default: |
+          pnpm-lock.yaml
+          turbo.json
+          **/package.json
+          **/tsconfig*.json
+          **/src/**
+          !**/node_modules/**
+      turbo-path:
+        type: string
+        default: .turbo
+      cargo-command:
+        description: "Builds the cargo target PRs reuse; empty skips the rust job."
+        type: string
+        default: ""
+      cargo-key-files:
+        type: string
+        default: |
+          **/Cargo.lock
+          rust-toolchain.toml
+          **/Cargo.toml
+          **/*.rs
+          !**/target/**
+      timeout-minutes:
+        type: number
+        default: 60
+    secrets:
+      checkout-token:
+        description: "Token for private submodules; github.token otherwise."
+        required: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  node:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 10
+        with:
+          token: ${{ secrets.checkout-token || github.token }}
+          submodules: ${{ inputs.submodules }}
+
+      # This repo's actions at actions-ref (see the input for why it exists).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+
+      - name: Export build environment
+        timeout-minutes: 1
+        env:
+          LINES: ${{ inputs.env }}
+        run: printf '%s\n' "$LINES" | sed '/^[[:space:]]*$/d' >> "$GITHUB_ENV"
+
+      - id: pnpm
+        uses: ./.shared-actions/.github/actions/setup-pnpm
+        timeout-minutes: 20
+        with:
+          node-version: ${{ inputs.node-version }}
+          run-install: "false"
+
+      - id: playwright
+        if: ${{ inputs.playwright-command != '' }}
+        uses: ./.shared-actions/.github/actions/restore-cache
+        timeout-minutes: 10
+        with:
+          name: playwright
+          path: ~/.cache/ms-playwright
+          key-files: pnpm-lock.yaml
+
+      - id: turbo
+        if: ${{ inputs.turbo-command != '' }}
+        uses: ./.shared-actions/.github/actions/restore-cache
+        timeout-minutes: 10
+        with:
+          name: turbo
+          path: ${{ inputs.turbo-path }}
+          key-files: ${{ inputs.turbo-key-files }}
+          fingerprint: "true"
+
+      - name: Decide what to rebuild
+        id: need
+        timeout-minutes: 1
+        env:
+          STORE: ${{ steps.pnpm.outputs.store-cache-hit != 'true' }}
+          PLAYWRIGHT: ${{ inputs.playwright-command != '' && steps.playwright.outputs.cache-hit != 'true' }}
+          TURBO: ${{ inputs.turbo-command != '' && steps.turbo.outputs.cache-hit != 'true' }}
+        run: |
+          echo "store=$STORE playwright=$PLAYWRIGHT turbo=$TURBO"
+          install=false
+          if [ "$STORE" = true ] || [ "$PLAYWRIGHT" = true ] || [ "$TURBO" = true ]; then install=true; fi
+          echo "install=$install" >> "$GITHUB_OUTPUT"
+
+      - name: pnpm install
+        if: ${{ steps.need.outputs.install == 'true' }}
+        timeout-minutes: 20
+        run: timeout 1080 pnpm install --frozen-lockfile --prefer-offline
+
+      - uses: ./.shared-actions/.github/actions/save-cache
+        timeout-minutes: 15
+        with:
+          name: pnpm-store
+          path: ~/.pnpm-store
+          key: ${{ steps.pnpm.outputs.store-cache-key }}
+          kind: deps
+          scope: main
+          cache-hit: ${{ steps.pnpm.outputs.store-cache-hit }}
+
+      - name: Setup command
+        if: ${{ steps.need.outputs.install == 'true' && inputs.setup-command != '' }}
+        timeout-minutes: 10
+        env:
+          CMD: ${{ inputs.setup-command }}
+        run: timeout 540 bash -c "$CMD"
+
+      - name: Install Playwright browsers
+        if: ${{ inputs.playwright-command != '' && steps.playwright.outputs.cache-hit != 'true' }}
+        timeout-minutes: 15
+        env:
+          CMD: ${{ inputs.playwright-command }}
+        run: timeout 840 bash -c "$CMD"
+
+      - if: ${{ inputs.playwright-command != '' }}
+        uses: ./.shared-actions/.github/actions/save-cache
+        timeout-minutes: 10
+        with:
+          name: playwright
+          path: ~/.cache/ms-playwright
+          key-files: pnpm-lock.yaml
+          kind: deps
+          scope: main
+          cache-hit: ${{ steps.playwright.outputs.cache-hit }}
+
+      - name: Turbo build
+        if: ${{ inputs.turbo-command != '' && steps.turbo.outputs.cache-hit != 'true' }}
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        env:
+          CMD: ${{ inputs.turbo-command }}
+        run: bash -c "$CMD"
+
+      - if: ${{ inputs.turbo-command != '' }}
+        uses: ./.shared-actions/.github/actions/save-cache
+        timeout-minutes: 15
+        with:
+          name: turbo
+          path: ${{ inputs.turbo-path }}
+          key-files: ${{ inputs.turbo-key-files }}
+          kind: build
+          scope: main
+          cache-hit: ${{ steps.turbo.outputs.cache-hit }}
+          restored-fingerprint: ${{ steps.turbo.outputs.fingerprint }}
+
+  rust:
+    if: ${{ inputs.cargo-command != '' }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 10
+        with:
+          token: ${{ secrets.checkout-token || github.token }}
+          submodules: ${{ inputs.submodules }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+
+      - uses: ./.shared-actions/.github/actions/rust-toolchain
+        timeout-minutes: 10
+
+      - id: cargo
+        uses: ./.shared-actions/.github/actions/restore-cache
+        timeout-minutes: 15
+        with:
+          name: cargo
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key-files: ${{ inputs.cargo-key-files }}
+          fingerprint: "true"
+
+      - name: Cargo build
+        if: ${{ steps.cargo.outputs.cache-hit != 'true' }}
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        env:
+          CMD: ${{ inputs.cargo-command }}
+        run: bash -c "$CMD"
+
+      - uses: ./.shared-actions/.github/actions/save-cache
+        timeout-minutes: 20
+        with:
+          name: cargo
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key-files: ${{ inputs.cargo-key-files }}
+          kind: build
+          scope: main
+          cache-hit: ${{ steps.cargo.outputs.cache-hit }}
+          restored-fingerprint: ${{ steps.cargo.outputs.fingerprint }}

@@ -2,9 +2,20 @@
 # Skipped on self-hosted by default for the reason save_cargo_cache gives: those
 # runners are persistent, so the upload is WAN traffic for nothing and evicts
 # entries the hosted runners restore from.
+#
+# Main vs PR, because an entry saved on a PR ref is readable only by that PR
+# while it still counts against the repo's shared 10 GB, evicting main's:
+#   - scope main: save whatever is asked (cache-main.yml keeps these alive).
+#   - scope pr: never save dependency stores (kind deps): main already has the
+#     lockfile's store, and a PR that changes the lockfile is one install.
+#     Build outputs are saved, then older entries of the same name on this PR
+#     ref are deleted so a PR holds one entry per kind. All of a PR's entries
+#     go when it closes (cancel-runs-on-pr-close.yml).
+#   - either scope: skip when the restore was an exact hit, or when the
+#     fingerprint of the paths matches what was restored (nothing changed).
 
 name: "save-cache"
-description: "Save a GitHub cache under the standard <name>-<os>-<arch>-<hash> key."
+description: "Save a GitHub cache under the standard <name>-<os>-<arch>-<hash> key, following the main/PR save rules."
 
 inputs:
   name:
@@ -25,35 +36,92 @@ inputs:
     description: "Full key, replacing the standard scheme."
     required: false
     default: ""
+  kind:
+    description: "'deps' (package stores, browsers; keyed on lockfiles) or 'build' (turbo, cargo target; keyed on inputs)."
+    required: false
+    default: "build"
+  scope:
+    description: "'main' or 'pr'. Empty means 'pr' for pull_request events and 'main' otherwise."
+    required: false
+    default: ""
+  cache-hit:
+    description: "restore-cache's cache-hit output. 'true' skips the save: the entry already exists."
+    required: false
+    default: "false"
+  restored-fingerprint:
+    description: "restore-cache's fingerprint output. Equal to the current fingerprint skips the save."
+    required: false
+    default: ""
   save-on-self-hosted:
     description: "Also save on self-hosted runners."
     required: false
     default: "false"
+  token:
+    description: "Token with actions:write, used to delete this PR's older entries."
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   key:
     description: "The key saved under."
     value: ${{ steps.key.outputs.key }}
+  saved:
+    description: "'true' when an entry was uploaded."
+    value: ${{ steps.key.outputs.save }}
 
 runs:
   using: "composite"
   steps:
 
-    - name: Compute cache key
+    - name: Decide whether to save
       id: key
       shell: bash
       env:
         NAME: ${{ inputs.name }}
         SUFFIX: ${{ inputs.suffix }}
         KEY: ${{ inputs.key }}
+        KIND: ${{ inputs.kind }}
+        SCOPE: ${{ inputs.scope || (github.event_name == 'pull_request' && 'pr' || 'main') }}
+        CACHE_HIT: ${{ inputs.cache-hit }}
+        RESTORED_FINGERPRINT: ${{ inputs.restored-fingerprint }}
+        PATHS: ${{ inputs.path }}
+        HOST_OK: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
         FILES_HASH: ${{ inputs.key-files != '' && hashFiles(inputs.key-files) || '' }}
       run: |
         set -euo pipefail
-        echo "key=${KEY:-$NAME-$RUNNER_OS-$RUNNER_ARCH-$FILES_HASH$SUFFIX}" >> "$GITHUB_OUTPUT"
+        save=true reason=""
+        if [ "$HOST_OK" != "true" ]; then save=false reason="self-hosted runner"
+        elif [ "$SCOPE" = "pr" ] && [ "$KIND" = "deps" ]; then save=false reason="PRs never save dependency stores"
+        elif [ "$CACHE_HIT" = "true" ]; then save=false reason="exact hit on restore"
+        elif [ -n "$RESTORED_FINGERPRINT" ] && [ "$RESTORED_FINGERPRINT" = "$(python3 "$GITHUB_ACTION_PATH/fingerprint.py" --paths "$PATHS")" ]; then
+          save=false reason="unchanged since restore"
+        fi
+        echo "save=$save scope=$SCOPE kind=$KIND ${reason:+($reason)}"
+        {
+          echo "key=${KEY:-$NAME-$RUNNER_OS-$RUNNER_ARCH-$FILES_HASH$SUFFIX}"
+          echo "prefix=$NAME-$RUNNER_OS-$RUNNER_ARCH-"
+          echo "save=$save"
+          echo "scope=$SCOPE"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Save cache
-      if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
+      if: ${{ steps.key.outputs.save == 'true' }}
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
       with:
         path: ${{ inputs.path }}
         key: ${{ steps.key.outputs.key }}
+
+    - name: Delete this PR's older entries of the same name
+      if: ${{ steps.key.outputs.save == 'true' && steps.key.outputs.scope == 'pr' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PREFIX: ${{ steps.key.outputs.prefix }}
+        KEEP: ${{ steps.key.outputs.key }}
+      run: |
+        set -uo pipefail
+        gh cache list -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF" --key "$PREFIX" --limit 100 --json id,key \
+          --jq ".[] | select(.key != \"$KEEP\") | .id" |
+        while read -r id; do
+          gh cache delete -R "$GITHUB_REPOSITORY" "$id" || echo "::warning::could not delete cache $id"
+        done

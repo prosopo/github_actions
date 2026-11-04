@@ -32,3 +32,24 @@ Generic pair over `actions/cache/restore` and `actions/cache/save` using the key
 
 ### app-token
 Mints a GitHub App installation token via `peter-murray/workflow-application-token-action`. Pass the app id and private key (e.g. `vars.PROSOPONATOR_APP_ID`, `secrets.PROSOPONATOR_APP_PRIVATE_KEY`); the token is in `outputs.token`.
+
+### cache-maintenance
+On self-hosted runner VMs (https://github.com/prosopo/gh-runner), evicts local cache entries (pnpm store, cargo, Playwright, turbo) unused for `max-age-days`, then oldest-first until under `max-size-gb` and above `min-free-gb`. Runs at most once per `interval-minutes`. setup-pnpm and rust-toolchain run it first; no-op on GitHub-hosted runners.
+
+### check-timeouts
+Fails when any job or step in `.github/workflows` lacks `timeout-minutes`.
+
+## Reusable workflows
+
+Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workflow runs this repo's actions from that commit.
+
+- `cache-main.yml`: on push to main and cron, restores every main cache for real (keeps it from 7-day eviction) and rebuilds and saves any miss.
+- `prime-runners.yml`: one job per online self-hosted runner VM (`vm-*` label, `host-*` fallback) filling its local pnpm store, cargo registry, Playwright and turbo build of main. Needs a token that can list org runners.
+- `cancel-runs-on-pr-close.yml`: on PR close, cancels its in-flight runs and deletes its cache entries.
+- `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
+
+## Cache rules (restore-cache / save-cache)
+
+- Dependency caches are keyed on lockfiles; build outputs on hashFiles of their inputs, with prefix fallback.
+- Main saves; PRs never save dependency stores, and keep one build entry per name (older ones deleted).
+- No save after an exact hit or when the restored tree is unchanged (`fingerprint`).

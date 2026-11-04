@@ -1,0 +1,23 @@
+# Fails the job when any workflow job or step lacks timeout-minutes, so a hung
+# command cannot hold a runner VM for GitHub's 360-minute default. Values come
+# from measured durations (about 2-3x p95), set by hand in each workflow.
+
+name: "check-timeouts"
+description: "Fail when a workflow job or step has no timeout-minutes."
+
+inputs:
+  dir:
+    description: "Directory of workflow files to check."
+    required: false
+    default: ".github/workflows"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check every job and step has timeout-minutes
+      shell: bash
+      env:
+        DIR: ${{ inputs.dir }}
+      run: |
+        python3 -c "import yaml" 2>/dev/null || timeout 120 python3 -m pip install --quiet pyyaml
+        timeout 60 python3 "$GITHUB_ACTION_PATH/check_timeouts.py" --dir "$DIR"

@@ -1,3 +1,6 @@
+# Node from package.json, optional npm cache restore, pinned npm, `npm ci`.
+# Legacy npm-workspace setup; pnpm repos use setup-pnpm instead.
+
 name: "npm"
 
 inputs:

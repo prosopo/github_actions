@@ -1,3 +1,6 @@
+# Counterpart of restore_cargo_cache. Prunes before saving and keeps only the
+# newest entry. New code should use save-cache (main/PR scope rules).
+
 name: "save_cargo_cache"
 
 # Every step is gated on runner type, mirroring restore_npm_cache /

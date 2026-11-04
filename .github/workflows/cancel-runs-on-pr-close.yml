@@ -1,0 +1,78 @@
+# When a PR is merged or closed: cancel its still-running workflow runs and
+# delete the GitHub cache entries saved on its ref.
+#
+# Runs: GitHub does not stop a PR's runs when it merges or closes (measured on
+# a sandbox repo), so they bill their full duration and hold runners other PRs
+# are queued for. Only runs created before the merge/close are cancelled
+# (created_at < merged_at || closed_at): anything created afterwards is a
+# reaction to the close (this workflow, auto-update-pr, release automation) and
+# must survive. `.event == "pull_request"` keeps merge_group runs out.
+#
+# Caches: entries saved on refs/pull/N/merge are readable only by that PR, so
+# once it closes they are dead weight in the repo's 10 GB budget, evicting
+# main's entries that every other PR restores from.
+#
+# Known limitation: GitHub only creates the `closed` run when the PR's merge
+# ref is current. Merged PRs always get it; a PR closed unmerged after the base
+# moved gets no run, and its runs and caches are left to expire.
+#
+# Callers: `on: pull_request: types: [closed]` with permissions
+# `actions: write`. No checkout and no PR code runs here, so the fork guard used
+# elsewhere is not needed.
+
+name: cancel-runs-on-pr-close
+
+on:
+  workflow_call:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      CUTOFF: ${{ github.event.pull_request.merged_at || github.event.pull_request.closed_at }}
+      SELF_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Cancel runs that were in flight while the PR was open
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          echo "PR #$PR_NUMBER head=$HEAD_SHA cutoff=$CUTOFF"
+          runs_json="$(timeout 60 gh api "repos/$REPO/actions/runs?head_sha=$HEAD_SHA&per_page=100")"
+          # SELF_RUN_ID must be --argjson: as a string `.id != $self` never
+          # matches and this run cancels itself. Timestamps are ISO-8601 UTC
+          # from the same API, so string comparison is exact.
+          mapfile -t ids < <(
+            jq -r --arg cutoff "$CUTOFF" --argjson self "$SELF_RUN_ID" '
+              .workflow_runs[]
+              | select(.event == "pull_request")
+              | select(.status == "queued" or .status == "in_progress")
+              | select(.created_at < $cutoff)
+              | select(.id != $self)
+              | .id' <<<"$runs_json"
+          )
+          for id in "${ids[@]}"; do
+            echo "Cancelling run $id"
+            # 409 means it finished between listing and cancelling: fine.
+            timeout 30 gh api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null \
+              || echo "  could not cancel $id (most likely it just finished)"
+          done
+
+      - name: Delete this PR's cache entries
+        timeout-minutes: 5
+        run: |
+          set -uo pipefail
+          ref="refs/pull/$PR_NUMBER/merge"
+          timeout 60 gh cache list -R "$REPO" --ref "$ref" --limit 1000 --json id,key --jq '.[] | "\(.id) \(.key)"' |
+          while read -r id key; do
+            echo "Deleting cache $key"
+            timeout 30 gh cache delete -R "$REPO" "$id" || echo "::warning::could not delete cache $id"
+          done

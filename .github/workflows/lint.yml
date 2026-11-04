@@ -1,3 +1,7 @@
+# Lints this repo on every PR and push to main: actionlint, yamllint, taplo,
+# shellcheck of composite action shell, the Python scripts' unit tests and the
+# timeout check. Hosted runners only (public repo; see README).
+
 name: lint
 
 on:
@@ -21,20 +25,29 @@ jobs:
   # context of exactly that name. Until this workflow existed the repo reported
   # no checks at all, so the required context could never be satisfied and every
   # PR was permanently unmergeable.
+  #
+  # The head.repo guard skips fork PRs (they never run here; the repo settings
+  # also require approval). A skipped `check` still satisfies the ruleset, so
+  # a fork PR can only merge after a maintainer reruns it from a branch.
   check:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
 
       # actionlint validates workflow files and shellchecks the `run:` blocks
       # inside them. It does not look at composite action.yml files at all --
       # that gap is what the shellcheck step below covers.
       - name: actionlint
+        timeout-minutes: 5
         run: |
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           ./actionlint -color
 
       - name: yamllint
+        timeout-minutes: 5
         run: |
           pipx install yamllint
           yamllint --strict .
@@ -43,6 +56,7 @@ jobs:
       # and pyproject.toml all drive builds, and a malformed one fails late and
       # confusingly, so the check exists before the first such file arrives.
       - name: taplo (toml)
+        timeout-minutes: 5
         run: |
           # Pinned, and not the "-full" asset: that variant is no longer
           # published, so a `latest/download/taplo-full-...` URL 404s.
@@ -57,8 +71,21 @@ jobs:
       # to a placeholder first: those expressions are not shell syntax and
       # shellcheck otherwise reports parse errors on every file.
       - name: shellcheck composite action steps
+        timeout-minutes: 5
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
           pip install --quiet pyyaml
           python3 .github/scripts/lint_composite_shell.py
+
+      - name: Python unit tests
+        timeout-minutes: 5
+        run: |
+          for d in .github/scripts .github/actions/*/; do
+            if ls "$d"/test_*.py >/dev/null 2>&1; then
+              (cd "$d" && timeout 120 python3 -m unittest -q test_*.py) || exit 1
+            fi
+          done
+
+      - uses: ./.github/actions/check-timeouts
+        timeout-minutes: 3
