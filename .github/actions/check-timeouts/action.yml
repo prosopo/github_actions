@@ -19,5 +19,7 @@ runs:
       env:
         DIR: ${{ inputs.dir }}
       run: |
-        python3 -c "import yaml" 2>/dev/null || timeout 120 python3 -m pip install --quiet pyyaml
+        # --user + --break-system-packages: self-hosted VMs use a PEP 668 system
+        # Python, which refuses plain pip installs.
+        python3 -c "import yaml" 2>/dev/null || timeout 120 python3 -m pip install --quiet --user --break-system-packages pyyaml
         timeout 60 python3 "$GITHUB_ACTION_PATH/check_timeouts.py" --dir "$DIR"
