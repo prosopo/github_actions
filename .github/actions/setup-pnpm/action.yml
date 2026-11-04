@@ -15,6 +15,10 @@ inputs:
     description: "File actions/setup-node reads the node version from (e.g. .nvmrc). Used when node-version is empty."
     required: false
     default: ""
+  node-cache:
+    description: "Package manager for actions/setup-node's own cache (e.g. 'pnpm'), which restores and, at job end, saves the store under setup-node's key. Empty disables it. Use with store-path '' so the store is not cached twice."
+    required: false
+    default: ""
   pnpm-version:
     description: "pnpm version. Empty reads the packageManager field of package.json."
     required: false
@@ -95,8 +99,8 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
         node-version-file: ${{ inputs.node-version == '' && inputs.node-version-file || '' }}
-        # The pnpm store cache below is the one cache; setup-node's own would
-        # be a second copy under a different key.
+        cache: ${{ inputs.node-cache }}
+        # Never the implicit packageManager-driven cache: only what node-cache asks for.
         package-manager-cache: false
 
     - name: Restore pnpm store cache
