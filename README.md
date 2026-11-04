@@ -39,6 +39,9 @@ On self-hosted runner VMs (https://github.com/prosopo/gh-runner), evicts local c
 ### check-timeouts
 Fails when any job or step in `.github/workflows` lacks `timeout-minutes`.
 
+### workflow-lint
+Fails when a workflow in `.github/workflows` breaks a house rule that actionlint does not check: missing concurrency (or a `workflow_call` group not keyed on a `concurrency-key` input), no `defaults.run.shell`, `pull_request` without the five PR types or a root job without a draft skip, `pull_request_target` without a fork guard, missing or write-granting top-level permissions, `cargo --allow-dirty`, a hardcoded `main` ref outside `on:`, or a secret written to a file or `GITHUB_ENV`. Waive one finding with `# workflow-lint: allow <rule> -- <reason>` on its line or the line above; a waiver without a reason fails.
+
 ## Reusable workflows
 
 Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workflow runs this repo's actions from that commit.
