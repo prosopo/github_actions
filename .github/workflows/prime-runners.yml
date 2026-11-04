@@ -89,12 +89,18 @@ jobs:
           ORG: ${{ github.repository_owner }}
           PREFIX: ${{ inputs.label-prefix }}
           FALLBACK: ${{ inputs.fallback-label-prefix }}
+          EXTRA: ${{ inputs.extra-labels }}
         run: |
           set -euo pipefail
           runners=$(timeout 120 gh api --paginate "orgs/$ORG/actions/runners?per_page=100" --jq '.runners[]' | jq -s '.')
+          # Only runners the prime job can land on: a VM without `self-hosted`
+          # (the pollers) or without every extra label would leave its job
+          # queued until GitHub's 24h limit.
           pick() {
-            jq -c --arg p "$1" '[.[] | select(.status == "online" and .os == "Linux")
-              | .labels[].name | select(startswith($p))] | unique' <<<"$runners"
+            jq -c --arg p "$1" --argjson need "$(jq -c '. + ["self-hosted"]' <<<"$EXTRA")" \
+              '[.[] | select(.status == "online" and .os == "Linux")
+              | [.labels[].name] as $have | select($need - $have == [])
+              | $have[] | select(startswith($p))] | unique' <<<"$runners"
           }
           labels=$(pick "$PREFIX")
           if [ "$labels" = "[]" ]; then
