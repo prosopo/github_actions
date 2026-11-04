@@ -1,0 +1,150 @@
+# Node + pnpm + pnpm store cache + `pnpm install`, in the order every pnpm
+# workspace job needs them. Shared so the node/pnpm versions, store path and
+# cache key cannot drift between jobs and repos: a job that resolves the store
+# differently misses the cache another job primed.
+
+name: "setup-pnpm"
+description: "Install node and pnpm, restore the pnpm store cache and run `pnpm install`."
+
+inputs:
+  node-version:
+    description: "Node version for actions/setup-node. Leave empty to use node-version-file."
+    required: false
+    default: ""
+  node-version-file:
+    description: "File actions/setup-node reads the node version from (e.g. .nvmrc). Used when node-version is empty."
+    required: false
+    default: ""
+  pnpm-version:
+    description: "pnpm version. Empty reads the packageManager field of package.json."
+    required: false
+    default: ""
+  pnpm-dest:
+    description: "Where pnpm/action-setup installs pnpm. Empty means runner.temp/setup-pnpm: the action's default under $HOME is wiped and reinstalled every job, which pulls pnpm out from under any other agent sharing the home directory on a self-hosted runner."
+    required: false
+    default: ""
+  store-path:
+    description: "pnpm store directory. Exported as pnpm_config_store_dir and used as the cache path. Empty leaves pnpm's default and skips the store cache."
+    required: false
+    default: "~/.pnpm-store"
+  lockfile:
+    description: "Lockfile hashed into the store cache key, relative to the workspace root."
+    required: false
+    default: "pnpm-lock.yaml"
+  restore-store-cache:
+    description: "Restore the pnpm store from the GitHub cache. Restore only: a save from a PR is visible to that PR alone, so priming belongs on the default branch (see save-pnpm-store-cache)."
+    required: false
+    default: "true"
+  cache-on-self-hosted:
+    description: "Also restore the store cache on self-hosted runners. Off by default: those are persistent machines that already have the store on disk."
+    required: false
+    default: "false"
+  run-install:
+    description: "Run `pnpm install` after setup."
+    required: false
+    default: "true"
+  install-args:
+    description: "Arguments passed through to `pnpm install`."
+    required: false
+    default: "--prefer-offline"
+  frozen-lockfile:
+    description: "Refuse to install when the lockfile does not match the manifests."
+    required: false
+    default: "true"
+  working-directory:
+    description: "Directory `pnpm install` runs in."
+    required: false
+    default: "."
+
+outputs:
+  store-cache-hit:
+    description: "'true' when the store cache was restored from an exact key match."
+    value: ${{ steps.store-cache.outputs.cache-hit }}
+  store-cache-key:
+    description: "Primary key of the pnpm store cache, for a caller that saves it."
+    value: ${{ steps.store-key.outputs.key }}
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: Resolve pnpm settings
+      id: store-key
+      shell: bash
+      env:
+        STORE_PATH: ${{ inputs.store-path }}
+        PNPM_DEST: ${{ inputs.pnpm-dest }}
+        LOCK_HASH: ${{ hashFiles(inputs.lockfile) }}
+      run: |
+        set -euo pipefail
+        if [ -n "$STORE_PATH" ]; then
+          echo "pnpm_config_store_dir=$STORE_PATH" >> "$GITHUB_ENV"
+        fi
+        {
+          echo "dest=${PNPM_DEST:-$RUNNER_TEMP/setup-pnpm}"
+          echo "key=pnpm-store-$RUNNER_OS-$RUNNER_ARCH-$LOCK_HASH"
+          echo "prefix=pnpm-store-$RUNNER_OS-$RUNNER_ARCH-"
+        } >> "$GITHUB_OUTPUT"
+
+    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+      with:
+        version: ${{ inputs.pnpm-version }}
+        dest: ${{ steps.store-key.outputs.dest }}
+
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        node-version-file: ${{ inputs.node-version == '' && inputs.node-version-file || '' }}
+        # The pnpm store cache below is the one cache; setup-node's own would
+        # be a second copy under a different key.
+        package-manager-cache: false
+
+    - name: Restore pnpm store cache
+      id: store-cache
+      if: ${{ inputs.store-path != '' && inputs.restore-store-cache == 'true' && (runner.environment != 'self-hosted' || inputs.cache-on-self-hosted == 'true') }}
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: ${{ inputs.store-path }}
+        key: ${{ steps.store-key.outputs.key }}
+        restore-keys: |
+          ${{ steps.store-key.outputs.prefix }}
+
+    # A tree npm installed has no node_modules/.modules.yaml. pnpm installs
+    # over one without removing what npm hoisted into it, so packages nothing
+    # declares stay importable and hide missing-dependency errors.
+    - name: Drop a node_modules tree npm installed
+      if: ${{ inputs.run-install == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ -d node_modules ] && [ ! -f node_modules/.modules.yaml ]; then
+          echo "node_modules was not installed by pnpm; removing every node_modules"
+          find . -name node_modules -type d -prune -exec rm -rf {} +
+        fi
+
+    - name: pnpm install
+      if: ${{ inputs.run-install == 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Via env, never interpolated into the script: a `${{ }}` in `run:` is
+      # expanded before bash parses it, so a quote in the value would execute.
+      env:
+        INSTALL_ARGS: ${{ inputs.install-args }}
+        FROZEN_LOCKFILE: ${{ inputs.frozen-lockfile }}
+      run: |
+        lockfile_flag=--frozen-lockfile
+        if [ "$FROZEN_LOCKFILE" = "false" ]; then
+          lockfile_flag=--no-frozen-lockfile
+        fi
+        # Unquoted on purpose: INSTALL_ARGS is a list of flags.
+        # shellcheck disable=SC2086
+        pnpm install "$lockfile_flag" $INSTALL_ARGS
+
+    # A tree installed with --ignore-scripts records its skipped builds as
+    # pending, and a later install that finds the tree up to date does not run
+    # them, so a persistent runner would hand the next job unbuilt natives.
+    - name: Run build scripts an earlier --ignore-scripts install skipped
+      if: ${{ inputs.run-install == 'true' && !contains(inputs.install-args, '--ignore-scripts') }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm rebuild -r --pending

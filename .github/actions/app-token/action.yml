@@ -1,0 +1,45 @@
+# One pinned copy of the GitHub App token step, so every repo mints tokens with
+# the same action version. The app id and key are inputs, not secrets read here:
+# a composite action cannot see the caller's secrets.
+
+name: "app-token"
+description: "Mint a GitHub App installation token (e.g. PROSOPONATOR) for the calling repo."
+
+inputs:
+  application-id:
+    description: "GitHub App id, e.g. vars.PROSOPONATOR_APP_ID."
+    required: true
+  application-private-key:
+    description: "GitHub App private key, e.g. secrets.PROSOPONATOR_APP_PRIVATE_KEY."
+    required: true
+  organization:
+    description: "Mint the token for the app's installation on this organization instead of the current repository."
+    required: false
+    default: ""
+  permissions:
+    description: "Comma-separated scope:level pairs to narrow the token, e.g. 'contents:write,pull_requests:write'. Empty takes the installation's permissions."
+    required: false
+    default: ""
+  revoke-token:
+    description: "Revoke the token at the end of the job."
+    required: false
+    default: "false"
+
+outputs:
+  token:
+    description: "The installation access token."
+    value: ${{ steps.token.outputs.token }}
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: Get token for gh app
+      id: token
+      uses: peter-murray/workflow-application-token-action@dad2b81e50ce3edeb5f3b7ffbd79f731368bd668  # v5.1.1
+      with:
+        application_id: ${{ inputs.application-id }}
+        application_private_key: ${{ inputs.application-private-key }}
+        organization: ${{ inputs.organization }}
+        permissions: ${{ inputs.permissions }}
+        revoke_token: ${{ inputs.revoke-token }}
