@@ -1,7 +1,9 @@
 # Lints and format checks for any Prosopo repo, called with workflow_call. Each language's job
 # runs only when the repo has that language and the change touched it, so one
-# file serves captcha, captcha-private and Protect unchanged. Every repo exposes
-# the same turbo task names (lint, lint:rust, lint:py / test, test:rust, test:py).
+# file serves captcha, captcha-private and Protect unchanged. Every pnpm repo exposes
+# the same turbo task names (lint, lint:rust, lint:py / test, test:rust, test:py);
+# npm, Go, PHP and pnpm-less repos pass their own commands. pnpm is set up only
+# when the root lockfile is pnpm-lock.yaml, npm ci only for package-lock.json.
 
 name: static
 
@@ -36,6 +38,18 @@ on:
         description: "Command for the python job."
         type: string
         default: "pnpm turbo run lint:py --continue"
+      go-command:
+        description: "Command for the go job."
+        type: string
+        default: "go vet ./..."
+      php-command:
+        description: "Command for the php job."
+        type: string
+        default: "composer run-script lint"
+      php-version:
+        description: "PHP version for the php job."
+        type: string
+        default: "8.3"
 
 permissions:
   contents: read
@@ -49,6 +63,9 @@ jobs:
       js: ${{ steps.detect.outputs.js-changed }}
       rust: ${{ steps.detect.outputs.rust-changed }}
       python: ${{ steps.detect.outputs.python-changed }}
+      go: ${{ steps.detect.outputs.go-changed }}
+      php: ${{ steps.detect.outputs.php-changed }}
+      package-manager: ${{ steps.detect.outputs.package-manager }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         timeout-minutes: 5
@@ -86,10 +103,22 @@ jobs:
           ref: ${{ inputs.actions-ref }}
           path: .shared-actions
       - uses: ./.shared-actions/.github/actions/setup-pnpm
+        if: ${{ needs.changes.outputs.package-manager == 'pnpm' }}
         timeout-minutes: 15
         with:
           node-version-file: ${{ inputs.working-directory }}/.nvmrc
           working-directory: ${{ inputs.working-directory }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        if: ${{ needs.changes.outputs.package-manager == 'npm' }}
+        timeout-minutes: 5
+        with:
+          # No .nvmrc: the runner's own node.
+          node-version-file: ${{ hashFiles(format('{0}/.nvmrc', inputs.working-directory)) != '' && format('{0}/.nvmrc', inputs.working-directory) || '' }}
+      - name: npm ci
+        if: ${{ needs.changes.outputs.package-manager == 'npm' }}
+        timeout-minutes: 15
+        working-directory: ${{ inputs.working-directory }}
+        run: timeout 840 npm ci --no-audit --no-fund
       - name: static js
         timeout-minutes: ${{ inputs.timeout-minutes }}
         working-directory: ${{ inputs.working-directory }}
@@ -117,6 +146,7 @@ jobs:
       - uses: ./.shared-actions/.github/actions/rust-toolchain
         timeout-minutes: 10
       - uses: ./.shared-actions/.github/actions/setup-pnpm
+        if: ${{ needs.changes.outputs.package-manager == 'pnpm' }}
         timeout-minutes: 15
         with:
           node-version-file: ${{ inputs.working-directory }}/.nvmrc
@@ -148,6 +178,7 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
         timeout-minutes: 5
       - uses: ./.shared-actions/.github/actions/setup-pnpm
+        if: ${{ needs.changes.outputs.package-manager == 'pnpm' }}
         timeout-minutes: 15
         with:
           node-version-file: ${{ inputs.working-directory }}/.nvmrc
@@ -157,4 +188,67 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         env:
           CMD: ${{ inputs.python-command }}
+        run: eval "$CMD"
+
+  go:
+    needs: changes
+    if: ${{ needs.changes.outputs.go == 'true' }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          submodules: recursive
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        timeout-minutes: 5
+        with:
+          go-version-file: ${{ inputs.working-directory }}/go.mod
+          cache-dependency-path: ${{ inputs.working-directory }}/go.sum
+      - name: static go
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CMD: ${{ inputs.go-command }}
+        run: eval "$CMD"
+
+  php:
+    needs: changes
+    if: ${{ needs.changes.outputs.php == 'true' }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          submodules: recursive
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962  # 2.40.0
+        timeout-minutes: 5
+        with:
+          php-version: ${{ inputs.php-version }}
+          tools: composer
+      - name: composer install
+        if: ${{ hashFiles(format('{0}/composer.json', inputs.working-directory)) != '' }}
+        timeout-minutes: 10
+        working-directory: ${{ inputs.working-directory }}
+        run: timeout 540 composer install --no-interaction --no-progress
+      - name: static php
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CMD: ${{ inputs.php-command }}
         run: eval "$CMD"

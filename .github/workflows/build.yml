@@ -1,5 +1,6 @@
 # Builds every package once with turbo and uploads the turbo cache, so later
-# stages restore it instead of rebuilding. Called with workflow_call.
+# stages restore it instead of rebuilding. Called with workflow_call, by pnpm +
+# turbo repos only: npm and non-JS repos have no shared build step to cache.
 
 name: build
 

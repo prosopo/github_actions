@@ -18,15 +18,26 @@ LANGUAGES: dict[str, list[str]] = {
     "js": ["*.ts", "*.tsx", "*.js", "*.mjs", "*.cjs", "*.jsx", "package.json"],
     "rust": ["*.rs", "Cargo.toml", "Cargo.lock"],
     "python": ["*.py", "pyproject.toml", "uv.lock"],
+    "go": ["*.go", "go.mod", "go.sum"],
+    "php": ["*.php", "composer.json", "composer.lock"],
     "docker": ["Dockerfile", "*.Dockerfile", "*.dockerfile", "docker-compose*.yml"],
 }
 
-AFFECTS_ALL = [".github/*", "pnpm-lock.yaml", ".nvmrc", "turbo.json"]
+AFFECTS_ALL = [".github/*", "pnpm-lock.yaml", "package-lock.json", ".nvmrc", "turbo.json"]
+
+# Root lockfile -> how the JS jobs install; only pnpm repos get the default turbo commands.
+LOCKFILES = {"pnpm-lock.yaml": "pnpm", "package-lock.json": "npm"}
 
 
 def _matches(path: str, patterns: list[str]) -> bool:
     name = path.rsplit("/", 1)[-1]
     return any(fnmatch.fnmatch(name, p) or fnmatch.fnmatch(path, p) for p in patterns)
+
+
+def package_manager(tracked: list[str]) -> str:
+    """pnpm wins when both lockfiles exist; empty when the repo has neither."""
+    present = [pm for lockfile, pm in LOCKFILES.items() if lockfile in tracked]
+    return present[0] if present else ""
 
 
 def detect(tracked: list[str], changed: list[str] | None) -> dict[str, bool]:
@@ -58,13 +69,14 @@ def main(argv: list[str] | None = None) -> int:
             changed = _git("diff", "--name-only", f"{args.base}...HEAD")
         except subprocess.CalledProcessError:
             changed = None
-    result = detect(_git("ls-files"), changed)
+    tracked = _git("ls-files")
+    result: dict[str, bool | str] = {**detect(tracked, changed), "package-manager": package_manager(tracked)}
     print(json.dumps({"event": "detect-languages", **result}))
     output = os.environ.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a") as f:
             for key, value in result.items():
-                f.write(f"{key}={str(value).lower()}\n")
+                f.write(f"{key}={value if isinstance(value, str) else str(value).lower()}\n")
     return 0
 
 

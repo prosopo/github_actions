@@ -1,5 +1,6 @@
-# Outputs has-<lang> and <lang>-changed for js, rust, python and docker, so
-# stage workflows can skip jobs for languages a repo lacks or a change missed.
+# Outputs has-<lang> and <lang>-changed for js, rust, python, go, php and
+# docker, so stage workflows can skip jobs for languages a repo lacks or a
+# change missed, plus the package manager the root lockfile implies.
 # Needs a checkout with enough history to reach `base` (fetch-depth: 0).
 
 name: "detect-languages"
@@ -22,6 +23,11 @@ outputs:
   rust-changed: {description: "Change touched Rust.", value: "${{ steps.detect.outputs.rust-changed }}"}
   has-python: {description: "Repo has Python.", value: "${{ steps.detect.outputs.has-python }}"}
   python-changed: {description: "Change touched Python.", value: "${{ steps.detect.outputs.python-changed }}"}
+  has-go: {description: "Repo has Go.", value: "${{ steps.detect.outputs.has-go }}"}
+  go-changed: {description: "Change touched Go.", value: "${{ steps.detect.outputs.go-changed }}"}
+  has-php: {description: "Repo has PHP.", value: "${{ steps.detect.outputs.has-php }}"}
+  php-changed: {description: "Change touched PHP.", value: "${{ steps.detect.outputs.php-changed }}"}
+  package-manager: {description: "pnpm or npm from the root lockfile; empty without one.", value: "${{ steps.detect.outputs.package-manager }}"}
   has-docker: {description: "Repo has Dockerfiles.", value: "${{ steps.detect.outputs.has-docker }}"}
   docker-changed: {description: "Change touched Dockerfiles.", value: "${{ steps.detect.outputs.docker-changed }}"}
 

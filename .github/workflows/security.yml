@@ -1,5 +1,5 @@
-# Dependency and secret scanning for any repo: pnpm audit when the repo has
-# JS, cargo audit when it has Rust, gitleaks always. Called with workflow_call.
+# Dependency and secret scanning for any repo: pnpm or npm audit by the root
+# lockfile, cargo audit when it has Rust, gitleaks always. Called with workflow_call.
 
 name: security
 
@@ -36,9 +36,13 @@ jobs:
         uses: ./.shared-actions/.github/actions/detect-languages
         timeout-minutes: 3
       - name: pnpm audit
-        if: ${{ steps.detect.outputs.has-js == 'true' }}
+        if: ${{ steps.detect.outputs.package-manager == 'pnpm' }}
         timeout-minutes: 5
         run: timeout 240 npx --yes pnpm@10 audit --prod --audit-level high
+      - name: npm audit
+        if: ${{ steps.detect.outputs.package-manager == 'npm' }}
+        timeout-minutes: 5
+        run: timeout 240 npm audit --omit=dev --audit-level=high
       - name: cargo audit
         if: ${{ steps.detect.outputs.has-rust == 'true' }}
         timeout-minutes: 10
