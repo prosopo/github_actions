@@ -42,6 +42,9 @@ Fails when any job or step in `.github/workflows` lacks `timeout-minutes`.
 ### workflow-lint
 Fails when a workflow in `.github/workflows` breaks a house rule that actionlint does not check: missing concurrency (or a `workflow_call` group not keyed on a `concurrency-key` input), no `defaults.run.shell`, `pull_request` without the five PR types or a root job without a draft skip, `pull_request_target` without a fork guard, missing or write-granting top-level permissions, `cargo --allow-dirty`, a hardcoded `main` ref outside `on:`, or a secret written to a file or `GITHUB_ENV`. Waive one finding with `# workflow-lint: allow <rule> -- <reason>` on its line or the line above; a waiver without a reason fails.
 
+### tag-versions
+On push to main, tags each package whose `package.json` version changed since `before` as `<unscoped name>-v<version>`; a changesets `fixed` group gets one tag named after its first entry. Existing tags are skipped and a push with no usable `before` tags nothing. Check out with `fetch-depth: 0` and an app token so the tag push triggers publish workflows. Created tags are in `outputs.tags` (JSON).
+
 ## Reusable workflows
 
 Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workflow runs this repo's actions from that commit.
@@ -50,6 +53,11 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
 - `prime-runners.yml`: one job per online self-hosted runner VM (`vm-*` label, `host-*` fallback) filling its local pnpm store, cargo registry, Playwright and turbo build of main. Needs a token that can list org runners.
 - `cancel-runs-on-pr-close.yml`: on PR close, cancels its in-flight runs and deletes its cache entries.
 - `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
+
+## This repo's own CI
+
+- `lint.yml` (`check`, required): actionlint, yamllint, taplo, shellcheck of composite action shell, `.github/scripts/validate_actions.py` (every action.yml's metadata: required keys, input/output descriptions, a `shell` on each composite `run` step, which actionlint does not read), the Python unit tests and the timeout check.
+- `actions-selftest.yml` (`actions-test`, required): runs restore-cache/save-cache (a miss, a save, then an exact hit in a second job) and setup-pnpm (against `tests/fixtures/pnpm`) on ubuntu and macOS, as consumers call them. `actions-test` fails unless every test job succeeded, and on drafts.
 
 ## Cache rules (restore-cache / save-cache)
 
