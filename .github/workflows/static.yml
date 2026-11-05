@@ -1,0 +1,160 @@
+# Lints and format checks for any Prosopo repo, called with workflow_call. Each language's job
+# runs only when the repo has that language and the change touched it, so one
+# file serves captcha, captcha-private and Protect unchanged. Every repo exposes
+# the same turbo task names (lint, lint:rust, lint:py / test, test:rust, test:py).
+
+name: static
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions whose actions this uses; pass the SHA the caller pins this workflow at (see cache-main.yml)."
+        type: string
+        required: true
+      runs-on:
+        description: "Runner label for every job."
+        type: string
+        default: "ubuntu-latest"
+      timeout-minutes:
+        description: "Per-job limit for the language jobs."
+        type: number
+        default: 20
+      working-directory:
+        description: "Directory the repo's workspace lives in (the self-test points this at a fixture)."
+        type: string
+        default: "."
+      js-command:
+        description: "Command for the js job."
+        type: string
+        default: "pnpm turbo run lint --continue"
+      rust-command:
+        description: "Command for the rust job."
+        type: string
+        default: "pnpm turbo run lint:rust --continue"
+      python-command:
+        description: "Command for the python job."
+        type: string
+        default: "pnpm turbo run lint:py --continue"
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 5
+    outputs:
+      js: ${{ steps.detect.outputs.js-changed }}
+      rust: ${{ steps.detect.outputs.rust-changed }}
+      python: ${{ steps.detect.outputs.python-changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          fetch-depth: 0
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - id: detect
+        uses: ./.shared-actions/.github/actions/detect-languages
+        timeout-minutes: 3
+        with:
+          dir: ${{ inputs.working-directory }}
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+
+  js:
+    needs: changes
+    if: ${{ needs.changes.outputs.js == 'true' }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          submodules: recursive
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - uses: ./.shared-actions/.github/actions/setup-pnpm
+        timeout-minutes: 15
+        with:
+          node-version-file: ${{ inputs.working-directory }}/.nvmrc
+          working-directory: ${{ inputs.working-directory }}
+      - name: static js
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CMD: ${{ inputs.js-command }}
+        run: eval "$CMD"
+
+  rust:
+    needs: changes
+    if: ${{ needs.changes.outputs.rust == 'true' }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          submodules: recursive
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - uses: ./.shared-actions/.github/actions/rust-toolchain
+        timeout-minutes: 10
+      - uses: ./.shared-actions/.github/actions/setup-pnpm
+        timeout-minutes: 15
+        with:
+          node-version-file: ${{ inputs.working-directory }}/.nvmrc
+          working-directory: ${{ inputs.working-directory }}
+      - name: static rust
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CMD: ${{ inputs.rust-command }}
+        run: eval "$CMD"
+
+  python:
+    needs: changes
+    if: ${{ needs.changes.outputs.python == 'true' }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          submodules: recursive
+      # This repo's actions at actions-ref; see cache-main.yml's input for why.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        timeout-minutes: 5
+      - uses: ./.shared-actions/.github/actions/setup-pnpm
+        timeout-minutes: 15
+        with:
+          node-version-file: ${{ inputs.working-directory }}/.nvmrc
+          working-directory: ${{ inputs.working-directory }}
+      - name: static python
+        timeout-minutes: ${{ inputs.timeout-minutes }}
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CMD: ${{ inputs.python-command }}
+        run: eval "$CMD"
