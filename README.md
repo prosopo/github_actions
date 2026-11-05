@@ -45,6 +45,9 @@ Fails when a workflow in `.github/workflows` breaks a house rule that actionlint
 ### tag-versions
 On push to main, tags each package whose `package.json` version changed since `before` as `<unscoped name>-v<version>`; a changesets `fixed` group gets one tag named after its first entry. Existing tags are skipped and a push with no usable `before` tags nothing. Check out with `fetch-depth: 0` and an app token so the tag push triggers publish workflows. Created tags are in `outputs.tags` (JSON).
 
+### detect-languages
+Outputs `has-<lang>` and `<lang>-changed` for js, rust, python and docker (`.github/actions/detect-languages/detect_languages.py`). A language changed when the diff from `base` touches its files; edits under `.github/`, `pnpm-lock.yaml`, `.nvmrc` or `turbo.json` count as changing every present language. No usable `base` (first push, all-zero SHA) means every present language changed.
+
 ## Reusable workflows
 
 Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workflow runs this repo's actions from that commit.
@@ -52,6 +55,13 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
 - `cache-main.yml`: on push to main and cron, restores every main cache for real (keeps it from 7-day eviction) and rebuilds and saves any miss.
 - `prime-runners.yml`: one job per online self-hosted runner VM (`vm-*` label, `host-*` fallback) filling its local pnpm store, cargo registry, Playwright and turbo build of main. Needs a token that can list org runners.
 - `cancel-runs-on-pr-close.yml`: on PR close, cancels its in-flight runs and deletes its cache entries.
+- Stage workflows, one per CI stage, usable unchanged by captcha, captcha-private and Protect. Fork PRs and drafts are skipped.
+  - `static.yml` / `test.yml`: a `changes` job (detect-languages), then js, rust and python jobs, each running only when the repo has that language and the change touched it. Default commands are the turbo tasks every repo exposes (`lint`, `lint:rust`, `lint:py` / `test`, `test:rust`, `test:py`); override with `js-command` etc.
+  - `build.yml`: one `turbo run build`, uploading the turbo cache as an artifact for later stages.
+  - `e2e.yml`: restores that cache, starts only the services in the repo's own compose file (none if absent), runs `test:e2e`.
+  - `security.yml`: `pnpm audit` (JS repos), `cargo audit` (Rust repos), gitleaks.
+  - `pr-housekeeping.yml`: requires a `.changeset/*.md` when `packages/` changed (repos with changesets), rejects WIP titles.
+  - `stage-workflows-selftest.yml` runs static and test against `.github/fixtures/js-only`: js must pass, rust and python must be skipped.
 - `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
 
 ## This repo's own CI

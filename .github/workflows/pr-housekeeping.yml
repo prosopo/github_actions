@@ -1,0 +1,44 @@
+# PR checks that need no build: a changeset is present when packages changed,
+# and the title is not a WIP placeholder. Called with workflow_call on PRs.
+
+name: pr-housekeeping
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions whose actions this uses; pass the SHA the caller pins this workflow at (see cache-main.yml)."
+        type: string
+        required: true
+      runs-on: {description: "Runner label.", type: string, default: "ubuntu-latest"}
+
+permissions:
+  contents: read
+
+jobs:
+  housekeeping:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 3
+        with:
+          fetch-depth: 0
+      - name: Changeset present when packages changed
+        timeout-minutes: 2
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ ! -d .changeset ] || [ -z "$BASE" ]; then echo "no changesets in this repo"; exit 0; fi
+          changed=$(git diff --name-only "$BASE...HEAD")
+          if echo "$changed" | grep -qE '(^|/)packages/' && ! echo "$changed" | grep -qE '^\.changeset/.+\.md$'; then
+            echo "::error::packages changed but no .changeset/*.md was added"
+            exit 1
+          fi
+      - name: Title is not WIP
+        timeout-minutes: 1
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if echo "$TITLE" | grep -qiE '^(wip|draft)\b'; then echo "::error::title starts with WIP/draft"; exit 1; fi
