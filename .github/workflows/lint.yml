@@ -60,7 +60,7 @@ jobs:
         run: |
           # Pinned, and not the "-full" asset: that variant is no longer
           # published, so a `latest/download/taplo-full-...` URL 404s.
-          curl -fsSL https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86_64.gz \
+          timeout 4m curl -fsSL https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86_64.gz \
             | gunzip | sudo tee /usr/local/bin/taplo >/dev/null
           sudo chmod +x /usr/local/bin/taplo
           taplo lint
@@ -73,9 +73,9 @@ jobs:
       - name: shellcheck composite action steps
         timeout-minutes: 5
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
-          pip install --quiet pyyaml
+          sudo timeout 4m apt-get update -qq
+          sudo timeout 4m apt-get install -y -qq shellcheck
+          timeout 4m pip install --quiet pyyaml
           python3 .github/scripts/lint_composite_shell.py
 
       - name: action.yml schema

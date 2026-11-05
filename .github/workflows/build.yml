@@ -40,7 +40,10 @@ jobs:
           node-version-file: .nvmrc
       - name: turbo build
         timeout-minutes: ${{ inputs.timeout-minutes }}
-        run: pnpm turbo run build --cache-dir=.turbo-cache
+        env:
+          # One minute under the step limit, so the hung command is the one named.
+          LIMIT: ${{ inputs.timeout-minutes }}
+        run: timeout "$((LIMIT - 1))m" pnpm turbo run build --cache-dir=.turbo-cache
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         timeout-minutes: 10
         with:

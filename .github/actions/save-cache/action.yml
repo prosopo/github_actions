@@ -73,6 +73,10 @@ runs:
   using: "composite"
   steps:
 
+    # macOS runners have no coreutils timeout, which later steps wrap commands in
+    - shell: bash
+      run: command -v timeout >/dev/null || echo "$GITHUB_ACTION_PATH/../timeout-shim" >> "$GITHUB_PATH"
+
     - name: Decide whether to save
       id: key
       shell: bash
@@ -120,8 +124,8 @@ runs:
         KEEP: ${{ steps.key.outputs.key }}
       run: |
         set -uo pipefail
-        gh cache list -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF" --key "$PREFIX" --limit 100 --json id,key \
+        timeout 5m gh cache list -R "$GITHUB_REPOSITORY" --ref "$GITHUB_REF" --key "$PREFIX" --limit 100 --json id,key \
           --jq ".[] | select(.key != \"$KEEP\") | .id" |
         while read -r id; do
-          gh cache delete -R "$GITHUB_REPOSITORY" "$id" || echo "::warning::could not delete cache $id"
+          timeout 5m gh cache delete -R "$GITHUB_REPOSITORY" "$id" || echo "::warning::could not delete cache $id"
         done

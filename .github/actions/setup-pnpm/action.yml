@@ -82,6 +82,10 @@ runs:
   using: "composite"
   steps:
 
+    # macOS runners have no coreutils timeout, which later steps wrap commands in
+    - shell: bash
+      run: command -v timeout >/dev/null || echo "$GITHUB_ACTION_PATH/../timeout-shim" >> "$GITHUB_PATH"
+
     # Runs before anything is installed so a full disk is freed before this
     # job needs space. Sibling script, not `uses:`: a composite action can only
     # reference another action at a fixed ref, which would drift from this one.
@@ -165,7 +169,7 @@ runs:
         fi
         # Unquoted on purpose: INSTALL_ARGS is a list of flags.
         # shellcheck disable=SC2086
-        pnpm install "$lockfile_flag" $INSTALL_ARGS
+        timeout 30m pnpm install "$lockfile_flag" $INSTALL_ARGS
 
     # A tree installed with --ignore-scripts records its skipped builds as
     # pending, and a later install that finds the tree up to date does not run
@@ -174,4 +178,4 @@ runs:
       if: ${{ inputs.run-install == 'true' && !contains(inputs.install-args, '--ignore-scripts') }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: pnpm rebuild -r --pending
+      run: timeout 30m pnpm rebuild -r --pending

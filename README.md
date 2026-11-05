@@ -37,7 +37,10 @@ Mints a GitHub App installation token via `peter-murray/workflow-application-tok
 On self-hosted runner VMs (https://github.com/prosopo/gh-runner), evicts local cache entries (pnpm store, cargo, Playwright, turbo) unused for `max-age-days`, then oldest-first until under `max-size-gb` and above `min-free-gb`. Runs at most once per `interval-minutes`. setup-pnpm and rust-toolchain run it first; no-op on GitHub-hosted runners.
 
 ### check-timeouts
-Fails when any job or step in `.github/workflows` lacks `timeout-minutes`.
+Fails when any job or step in `.github/workflows` lacks `timeout-minutes`, or when a hang-prone command (pnpm, npm, docker, cargo, gh, curl, apt-get, `git fetch`/`push`/`clone`, ...) in a workflow or composite action (`.github/actions`) runs without `timeout N`. A composite step cannot set `timeout-minutes`, and a step timeout over a multi-command block does not say which command hung. curl/wget with `--max-time` pass; waive a line with `# no-timeout: <why>`. Keep each command's limit under its step's.
+
+### timeout-shim
+A Perl `timeout DURATION CMD...` for macOS runners, which lack coreutils: on expiry it sends TERM to the command's process group, KILL 5s later, and exits 124. Actions that wrap commands in `timeout` put it on `PATH` in their first step when `timeout` is missing.
 
 ### workflow-lint
 Fails when a workflow in `.github/workflows` breaks a house rule that actionlint does not check: missing concurrency (or a `workflow_call` group not keyed on a `concurrency-key` input), no `defaults.run.shell`, `pull_request` without the five PR types or a root job without a draft skip, `pull_request_target` without a fork guard, missing or write-granting top-level permissions, `cargo --allow-dirty`, a hardcoded `main` ref outside `on:`, or a secret written to a file or `GITHUB_ENV`. Waive one finding with `# workflow-lint: allow <rule> -- <reason>` on its line or the line above; a waiver without a reason fails.

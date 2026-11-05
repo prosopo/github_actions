@@ -22,6 +22,10 @@ runs:
     using: "composite"
     steps:
 
+      # macOS runners have no coreutils timeout, which later steps wrap commands in
+      - shell: bash
+        run: command -v timeout >/dev/null || echo "$GITHUB_ACTION_PATH/../timeout-shim" >> "$GITHUB_PATH"
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version-file: 'package.json'
@@ -54,7 +58,7 @@ runs:
             exit 0
           fi
           rm -rf "$(npm prefix -g)/lib/node_modules"/.npm-*
-          npm i -g "npm@$NPM_VERSION"
+          timeout 30m npm i -g "npm@$NPM_VERSION"
 
       # Skip `npm ci` when node_modules was restored from an exact-lockfile cache hit: the tree
       # already matches the lockfile, and `npm ci` would only delete it and reinstall the identical
@@ -67,7 +71,7 @@ runs:
           # Unquoted on purpose: npm_ci_args is a list of flags and must word
           # split into separate arguments.
           # shellcheck disable=SC2086
-          npm ci ${{ inputs.npm_ci_args }}
+          timeout 30m npm ci ${{ inputs.npm_ci_args }}
 
       - name: skipped install (node_modules cache hit)
         shell: bash
