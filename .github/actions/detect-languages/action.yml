@@ -15,6 +15,10 @@ inputs:
     description: "Directory whose files are classified (a subtree of the repo)."
     required: false
     default: "."
+  exclude:
+    description: "Whitespace-separated directories (relative to dir) whose files are ignored, e.g. test fixtures in other languages."
+    required: false
+    default: ""
 
 outputs:
   has-js: {description: "Repo has JS/TS.", value: "${{ steps.detect.outputs.has-js }}"}
@@ -38,5 +42,9 @@ runs:
       shell: bash
       env:
         BASE: ${{ inputs.base }}
+        EXCLUDE: ${{ inputs.exclude }}
       working-directory: ${{ inputs.dir }}
-      run: timeout 120 python3 "$GITHUB_ACTION_PATH/detect_languages.py" --base "$BASE"
+      run: |
+        args=()
+        for e in $EXCLUDE; do args+=(--exclude "$e"); done
+        timeout 120 python3 "$GITHUB_ACTION_PATH/detect_languages.py" --base "$BASE" "${args[@]}"

@@ -65,6 +65,10 @@ jobs:
       js-command: pnpm run setup:lint-tools && PATH="$HOME/.local/bin:$PATH" pnpm run lint
       python-command: pnpm run lint:py
       rust-command: exit 1
+      go-command: exit 1
+      php-command: exit 1
+      # The fixtures' Go and PHP belong to the selftest jobs, not this repo.
+      exclude-paths: .github/fixtures
 
   test:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
@@ -74,6 +78,10 @@ jobs:
       js-command: echo "no JS unit tests; JS here is only stage fixtures"
       python-command: pnpm run test:py
       rust-command: exit 1
+      go-command: exit 1
+      php-command: exit 1
+      # The fixtures' Go and PHP belong to the selftest jobs, not this repo.
+      exclude-paths: .github/fixtures
 
   selftest-static:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
