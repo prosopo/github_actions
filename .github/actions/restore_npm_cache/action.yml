@@ -2,6 +2,7 @@
 # VMs keep them on disk). Legacy; new code uses restore-cache.
 
 name: "restore_npm_cache"
+description: "Restore npm, Cypress, turbo and nx caches on GitHub-hosted runners (legacy)."
 
 inputs:
   restore-on-self-hosted:

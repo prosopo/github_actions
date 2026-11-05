@@ -78,6 +78,10 @@ jobs:
           pip install --quiet pyyaml
           python3 .github/scripts/lint_composite_shell.py
 
+      - name: action.yml schema
+        timeout-minutes: 2
+        run: python3 .github/scripts/validate_actions.py
+
       - name: Python unit tests
         timeout-minutes: 5
         run: |

@@ -4,6 +4,7 @@
 # builds are what fill those disks.
 
 name: "rust-toolchain"
+description: "Install the toolchain, targets and components named by rust-toolchain.toml."
 
 runs:
     using: "composite"

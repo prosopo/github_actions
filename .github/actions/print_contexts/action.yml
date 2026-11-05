@@ -3,6 +3,7 @@
 # not derived ones), so leave it unset outside debugging.
 
 name: "print_contexts"
+description: "Print the workflow contexts as JSON in collapsed log groups, for debugging."
 
 inputs:
     INPUTS_CONTEXT:
