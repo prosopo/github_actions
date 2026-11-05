@@ -1,6 +1,8 @@
-# Runs static.yml and test.yml against a JS-only fixture so a change to them is
-# exercised before other repos call them: the js job must pass and the rust and
-# python jobs must be skipped. Calls the local files, so a PR tests its own edits.
+# Runs static.yml and test.yml against one fixture repo per language so a
+# change to them is exercised before other repos call them: each fixture's own
+# job must pass and every other language's job must be skipped. The npm and
+# python fixtures also prove those jobs don't need pnpm. Calls the local files,
+# so a PR tests its own edits.
 
 name: stage-workflows-selftest
 
@@ -10,6 +12,7 @@ on:
     paths:
       - ".github/workflows/static.yml"
       - ".github/workflows/test.yml"
+      - ".github/workflows/security.yml"
       - ".github/workflows/stage-workflows-selftest.yml"
       - ".github/actions/detect-languages/**"
       - ".github/fixtures/**"
@@ -24,21 +27,42 @@ permissions:
 
 jobs:
   static:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {fixture: js-only, js: pnpm run lint}
+          - {fixture: npm-only, js: npm run lint}
+          - {fixture: python-only, python: python3 -m py_compile test_fixture.py}
+          - {fixture: go-only, go: go vet ./...}
+          - {fixture: php-only, php: composer run-script lint}
     uses: ./.github/workflows/static.yml
     with:
       actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      working-directory: .github/fixtures/js-only
-      js-command: pnpm run lint
+      working-directory: .github/fixtures/${{ matrix.fixture }}
       # Fail loudly if detection wrongly runs a language the fixture lacks.
+      js-command: ${{ matrix.js || 'exit 1' }}
       rust-command: exit 1
-      python-command: exit 1
+      python-command: ${{ matrix.python || 'exit 1' }}
+      go-command: ${{ matrix.go || 'exit 1' }}
+      php-command: ${{ matrix.php || 'exit 1' }}
 
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {fixture: js-only, js: pnpm run test}
+          - {fixture: npm-only, js: npm test}
+          - {fixture: python-only, python: python3 -m unittest -q}
+          - {fixture: go-only, go: go test ./...}
+          - {fixture: php-only, php: composer run-script test}
     uses: ./.github/workflows/test.yml
     with:
       actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      working-directory: .github/fixtures/js-only
-      js-command: pnpm run test
-      # Fail loudly if detection wrongly runs a language the fixture lacks.
+      working-directory: .github/fixtures/${{ matrix.fixture }}
+      js-command: ${{ matrix.js || 'exit 1' }}
       rust-command: exit 1
-      python-command: exit 1
+      python-command: ${{ matrix.python || 'exit 1' }}
+      go-command: ${{ matrix.go || 'exit 1' }}
+      php-command: ${{ matrix.php || 'exit 1' }}

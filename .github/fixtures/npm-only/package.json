@@ -1,0 +1,9 @@
+{
+	"name": "stage-workflows-fixture-npm-only",
+	"private": true,
+	"description": "An npm repo for stage-workflows-selftest.yml: the js job must install with npm ci, not pnpm.",
+	"scripts": {
+		"lint": "node -e \"console.log('fixture lint ok')\"",
+		"test": "node -e \"console.log('fixture test ok')\""
+	}
+}

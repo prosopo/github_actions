@@ -1,0 +1,8 @@
+{
+	"name": "prosopo/stage-workflows-fixture-php-only",
+	"description": "A PHP repo for stage-workflows-selftest.yml.",
+	"scripts": {
+		"lint": "php -l index.php",
+		"test": "php index.php"
+	}
+}
