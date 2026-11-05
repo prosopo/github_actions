@@ -1,3 +1,4 @@
+# Not test.yml: that name is the shared test-stage reusable workflow.
 # Runs the shared actions the way consumers do (uses: ./.github/actions/<name>)
 # on hosted Linux and macOS, and asserts what they produce. Without it an action
 # is only exercised by consumer CI after a pin bump, which is how a macOS
@@ -6,7 +7,7 @@
 # skipped by a failed `needs` would otherwise count as passing. Drafts skip the
 # tests and fail it, so a draft never shows as passing.
 
-name: test
+name: actions-selftest
 
 on:
   pull_request:
