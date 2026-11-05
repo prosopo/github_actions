@@ -2,12 +2,12 @@
 # Legacy npm-workspace setup; pnpm repos use setup-pnpm instead.
 
 name: "npm"
+description: "Set up Node from package.json, optionally restore the npm cache, pin npm and run npm ci (legacy npm workspaces)."
 
 inputs:
   npm_ci:
     description: 'Run npm ci'
     required: false
-    type: boolean
     default: true
   npm_ci_args:
     description: 'npm ci args'
@@ -17,7 +17,6 @@ inputs:
     description: 'Restore npm cache'
     required: false
     default: true
-    type: boolean
 
 runs:
     using: "composite"

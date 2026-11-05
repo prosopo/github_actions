@@ -2,6 +2,7 @@
 # only the newest entry. Legacy; new code uses save-cache.
 
 name: "save_npm_cache"
+description: "Verify and save the npm cache, keeping only the newest entry (legacy)."
 
 # Every step is gated on runner type, mirroring restore_npm_cache /
 # restore_cargo_cache which already skip on self-hosted. Our self-hosted runners

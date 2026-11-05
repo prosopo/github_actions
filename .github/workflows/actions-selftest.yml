@@ -1,0 +1,157 @@
+# Not test.yml: that name is the shared test-stage reusable workflow.
+# Runs the shared actions the way consumers do (uses: ./.github/actions/<name>)
+# on hosted Linux and macOS, and asserts what they produce. Without it an action
+# is only exercised by consumer CI after a pin bump, which is how a macOS
+# setup-pnpm regression reached every repo. `actions-test` is the single job a
+# ruleset requires; it fails unless every test job succeeded, because a job
+# skipped by a failed `needs` would otherwise count as passing. Drafts skip the
+# tests and fail it, so a draft never shows as passing.
+
+name: actions-selftest
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Unique per run and attempt so the first restore is always a miss.
+  CACHE_SUFFIX: -selftest-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  cache-save:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # save-cache deletes this PR's older entries of the same name.
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+
+      - name: Write payload
+        timeout-minutes: 1
+        run: mkdir -p selftest && echo "$RUNNER_OS-$CACHE_SUFFIX" > selftest/payload
+
+      - id: restore
+        uses: ./.github/actions/restore-cache
+        timeout-minutes: 3
+        with:
+          name: selftest
+          path: selftest
+          suffix: ${{ env.CACHE_SUFFIX }}
+          prefix-fallback: "false"
+
+      - name: First restore misses
+        timeout-minutes: 1
+        env:
+          HIT: ${{ steps.restore.outputs.cache-hit }}
+        run: test "$HIT" != "true"
+
+      - id: save
+        uses: ./.github/actions/save-cache
+        timeout-minutes: 5
+        with:
+          name: selftest
+          path: selftest
+          suffix: ${{ env.CACHE_SUFFIX }}
+          kind: build
+
+      - name: Save uploaded
+        timeout-minutes: 1
+        env:
+          SAVED: ${{ steps.save.outputs.saved }}
+        run: test "$SAVED" = "true"
+
+  cache-restore:
+    needs: cache-save
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+
+      - id: restore
+        uses: ./.github/actions/restore-cache
+        timeout-minutes: 3
+        with:
+          name: selftest
+          path: selftest
+          suffix: ${{ env.CACHE_SUFFIX }}
+          prefix-fallback: "false"
+          fail-on-cache-miss: "true"
+
+      - name: Exact hit with the saved payload
+        timeout-minutes: 1
+        env:
+          HIT: ${{ steps.restore.outputs.cache-hit }}
+        run: |
+          test "$HIT" = "true"
+          test "$(cat selftest/payload)" = "$RUNNER_OS-$CACHE_SUFFIX"
+
+  setup-pnpm:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+
+      - uses: ./.github/actions/setup-pnpm
+        timeout-minutes: 10
+        with:
+          node-version: "24.22.1"
+          lockfile: tests/fixtures/pnpm/pnpm-lock.yaml
+          working-directory: tests/fixtures/pnpm
+
+      - name: Node, pnpm and the install are in place
+        timeout-minutes: 1
+        working-directory: tests/fixtures/pnpm
+        run: |
+          test "$(node --version)" = "v24.22.1"
+          test "$(pnpm --version)" = "11.27.1"
+          test -n "$pnpm_config_store_dir"
+          node -e 'require("is-number")'
+
+  actions-test:
+    if: ${{ always() }}
+    needs: [cache-save, cache-restore, setup-pnpm]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every test job succeeded
+        timeout-minutes: 1
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
+        run: |
+          echo "results: $RESULTS"
+          if [ "$DRAFT" = "true" ]; then echo "draft PR: tests skipped; mark it ready to run them"; exit 1; fi
+          if [ "$FORK_PR" = "true" ]; then echo "fork PR: tests skipped"; exit 0; fi
+          for r in $RESULTS; do [ "$r" = "success" ] || exit 1; done

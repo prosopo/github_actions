@@ -115,6 +115,7 @@ runs:
       with:
         version: ${{ inputs.pnpm-version }}
         dest: ${{ steps.store-key.outputs.dest }}
+        package_json_file: ${{ inputs.working-directory }}/package.json
 
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
       with:

@@ -4,6 +4,7 @@
 # New code should use restore-cache, which supports the main/PR save rules.
 
 name: "restore_cargo_cache"
+description: "Restore the cargo registry, git and target caches on GitHub-hosted runners."
 
 inputs:
   restore-on-self-hosted:
