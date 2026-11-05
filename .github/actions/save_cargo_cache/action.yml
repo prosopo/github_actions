@@ -94,11 +94,11 @@ runs:
         run: |
             # remove all but the latest cache, leaving only the cache we just saved
             echo "Fetching list of cache key"
-            cacheKeys=$(gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "cargo-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +3)
+            cacheKeys=$(timeout 5m gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "cargo-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +3)
             echo caches to be removed:
             echo "${cacheKeys}"
             set +e
             for cacheKey in $cacheKeys
             do
-                gh cache delete "$cacheKey" -R "${{ github.repository }}"
+                timeout 5m gh cache delete "$cacheKey" -R "${{ github.repository }}"
             done

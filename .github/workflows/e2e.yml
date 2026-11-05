@@ -57,7 +57,10 @@ jobs:
           fi
       - name: turbo test:e2e
         timeout-minutes: ${{ inputs.timeout-minutes }}
-        run: pnpm turbo run test:e2e --cache-dir=.turbo-cache
+        env:
+          # One minute under the step limit, so the hung command is the one named.
+          LIMIT: ${{ inputs.timeout-minutes }}
+        run: timeout "$((LIMIT - 1))m" pnpm turbo run test:e2e --cache-dir=.turbo-cache
       - name: Service logs
         if: ${{ failure() }}
         timeout-minutes: 3

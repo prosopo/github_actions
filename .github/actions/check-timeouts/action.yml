@@ -1,15 +1,21 @@
-# Fails the job when any workflow job or step lacks timeout-minutes, so a hung
-# command cannot hold a runner VM for GitHub's 360-minute default. Values come
-# from measured durations (about 2-3x p95), set by hand in each workflow.
+# Fails the job when any workflow job or step lacks timeout-minutes, or a
+# hang-prone command in a workflow or composite action runs without `timeout N`,
+# so a hung command cannot hold a runner VM for GitHub's 360-minute default.
+# Limits are round backstops (5 minutes for quick steps, 30-60 for builds and
+# tests), not tuned to measured durations: a slow healthy run must not trip one.
 
 name: "check-timeouts"
-description: "Fail when a workflow job or step has no timeout-minutes."
+description: "Fail when a workflow job or step has no timeout-minutes, or a hang-prone command has no timeout."
 
 inputs:
   dir:
     description: "Directory of workflow files to check."
     required: false
     default: ".github/workflows"
+  actions-dir:
+    description: "Directory searched recursively for composite actions to check."
+    required: false
+    default: ".github/actions"
 
 runs:
   using: "composite"
@@ -18,8 +24,9 @@ runs:
       shell: bash
       env:
         DIR: ${{ inputs.dir }}
+        ACTIONS_DIR: ${{ inputs.actions-dir }}
       run: |
         # --user + --break-system-packages: self-hosted VMs use a PEP 668 system
         # Python, which refuses plain pip installs.
         python3 -c "import yaml" 2>/dev/null || timeout 120 python3 -m pip install --quiet --user --break-system-packages pyyaml
-        timeout 60 python3 "$GITHUB_ACTION_PATH/check_timeouts.py" --dir "$DIR"
+        timeout 60 python3 "$GITHUB_ACTION_PATH/check_timeouts.py" --dir "$DIR" --actions-dir "$ACTIONS_DIR"

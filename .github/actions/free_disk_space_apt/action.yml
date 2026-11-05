@@ -26,10 +26,10 @@ runs:
         # Each pattern is a package family that is multiple GB installed and that
         # almost no build needs. `|| true` throughout: the image contents drift
         # between runner releases and a pattern matching nothing must not fail CI.
-        sudo apt-get remove -y --purge '^llvm-.*' '^libclang.*' '^mysql-.*' '^mongodb-.*' \
+        sudo timeout 5m apt-get remove -y --purge '^llvm-.*' '^libclang.*' '^mysql-.*' '^mongodb-.*' \
           '^postgresql-.*' azure-cli google-cloud-cli firefox google-chrome-stable \
           microsoft-edge-stable powershell mono-devel || true
-        sudo apt-get autoremove -y || true
-        sudo apt-get clean || true
+        sudo timeout 5m apt-get autoremove -y || true
+        sudo timeout 5m apt-get clean || true
         after=$(df --output=avail -k / | tail -n1)
         echo "Purge large apt packages: freed $(( (after - before) / 1024 )) MB, $(( after / 1024 / 1024 )) GB now free on /"

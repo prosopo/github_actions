@@ -37,7 +37,7 @@ runs:
         if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
         shell: bash
         run: |
-          npm cache verify
+          timeout 30m npm cache verify
 
       - name: Save npm cache
         if: ${{ runner.environment != 'self-hosted' || inputs.save-on-self-hosted == 'true' }}
@@ -67,13 +67,13 @@ runs:
         run: |
             # remove all but the latest cache, leaving only the cache we just saved
             echo "Fetching list of cache key"
-            cacheKeys=$(gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "npm-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +3)
+            cacheKeys=$(timeout 5m gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "npm-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +3)
             echo caches to be removed:
             echo "${cacheKeys}"
             set +e
             for cacheKey in $cacheKeys
             do
-                gh cache delete "$cacheKey" -R "${{ github.repository }}"
+                timeout 5m gh cache delete "$cacheKey" -R "${{ github.repository }}"
             done
 
       - name: Cleanup node_modules caches
@@ -82,11 +82,11 @@ runs:
             # node_modules caches are keyed by lockfile hash, so stale hashes accumulate as the
             # lockfile changes. Keep only the most recent (the one we just saved) and remove the rest.
             echo "Fetching list of node_modules cache keys"
-            cacheKeys=$(gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "node-modules-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +2)
+            cacheKeys=$(timeout 5m gh cache list --sort created_at --order desc --limit 100 -R "${{ github.repository }}" --key "node-modules-${{ runner.os }}-${{ runner.arch }}-" | cut -f 1 | tail -n +2)
             echo caches to be removed:
             echo "${cacheKeys}"
             set +e
             for cacheKey in $cacheKeys
             do
-                gh cache delete "$cacheKey" -R "${{ github.repository }}"
+                timeout 5m gh cache delete "$cacheKey" -R "${{ github.repository }}"
             done

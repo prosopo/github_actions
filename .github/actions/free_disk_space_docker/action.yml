@@ -25,6 +25,6 @@ runs:
         before=$(df --output=avail -k / | tail -n1)
         # Only safe before anything has been built or pulled: this removes every
         # image on the runner, not just the preloaded ones.
-        sudo docker image prune --all --force || true
+        sudo timeout 5m docker image prune --all --force || true
         after=$(df --output=avail -k / | tail -n1)
         echo "Remove preloaded Docker images: freed $(( (after - before) / 1024 )) MB, $(( after / 1024 / 1024 )) GB now free on /"
