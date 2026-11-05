@@ -1,0 +1,46 @@
+# Tags each unit whose package.json version changed in this push as
+# <name>-v<version>, one tag per changesets fixed group. Rules are in
+# tag_versions.py's docstring. Check out with fetch-depth: 0 (the before
+# commit and existing tags must be present) and with the token the tags
+# should be pushed as: a GITHUB_TOKEN push does not trigger other workflows,
+# so publish-on-tag needs an app token or PAT.
+
+name: "tag-versions"
+description: "Tag every package whose version changed in this push as <name>-v<version>."
+
+inputs:
+  before:
+    description: "Commit before the push (github.event.before)."
+    required: true
+  after:
+    description: "Commit to tag (github.sha)."
+    required: true
+  changeset-config:
+    description: "Path to the changesets config holding fixed groups."
+    required: false
+    default: ".changeset/config.json"
+  push:
+    description: "Push new tags to origin."
+    required: false
+    default: "true"
+
+outputs:
+  tags:
+    description: "JSON array of the tags created."
+    value: ${{ steps.tag.outputs.tags }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Tag changed versions
+      id: tag
+      shell: bash
+      env:
+        BEFORE: ${{ inputs.before }}
+        AFTER: ${{ inputs.after }}
+        CONFIG: ${{ inputs.changeset-config }}
+        PUSH: ${{ inputs.push }}
+      run: |
+        push_flag=()
+        if [ "$PUSH" = "true" ]; then push_flag=(--push); fi
+        timeout 120 python3 "$GITHUB_ACTION_PATH/tag_versions.py" --before "$BEFORE" --after "$AFTER" --changeset-config "$CONFIG" "${push_flag[@]}"
