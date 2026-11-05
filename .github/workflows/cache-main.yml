@@ -45,7 +45,7 @@ on:
         type: string
         default: ""
       setup-command:
-        description: "Run after install and before any build, e.g. generating .env files."
+        description: "Run after install and before any build, e.g. generating .env files. Sees checkout-token as GH_TOKEN, for downloads from private repos."
         type: string
         default: ""
       playwright-command:
@@ -177,6 +177,7 @@ jobs:
         timeout-minutes: 10
         env:
           CMD: ${{ inputs.setup-command }}
+          GH_TOKEN: ${{ secrets.checkout-token || github.token }}
         run: timeout 540 bash -c "$CMD"
 
       - name: Install Playwright browsers
