@@ -64,12 +64,16 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
   - `e2e.yml`: restores that cache, starts only the services in the repo's own compose file (none if absent), runs `test:e2e`.
   - `security.yml`: `pnpm audit` or `npm audit` by the root lockfile, `cargo audit` (Rust repos), gitleaks.
   - `pr-housekeeping.yml`: requires a `.changeset/*.md` when `packages/` changed (repos with changesets), rejects WIP titles.
-  - `stage-workflows-selftest.yml` runs static and test against one fixture per language under `.github/fixtures` (js-only, npm-only, python-only, go-only, php-only): each fixture's own job must pass and every other language's job must be skipped.
 - `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
 
 ## This repo's own CI
 
-- `lint.yml` (`check`, required): actionlint, yamllint, taplo, shellcheck of composite action shell, `.github/scripts/validate_actions.py` (every action.yml's metadata: required keys, input/output descriptions, a `shell` on each composite `run` step, which actionlint does not read), the Python unit tests and the timeout check.
+- `ci.yml` (`check`, required): calls this repo's own `static.yml` and `test.yml` from the PR's checkout, so a PR exercises its edits to them.
+  - `static`: the js job runs `pnpm run setup:lint-tools` then `pnpm run lint` (package.json: actionlint, yamllint, taplo, shellcheck of composite action shell via `.github/scripts/lint_composite_shell.py`, `.github/scripts/validate_actions.py` for every action.yml's metadata, which actionlint does not read, and check-timeouts); the python job byte-compiles every script (`lint:py`).
+  - `test`: the python job runs `pnpm run test:py` (`.github/scripts/run_python_tests.py`: unittest in every directory holding `test_*.py`, found by glob).
+  - `selftest-static` / `selftest-test`: the same stages against one fixture per language under `.github/fixtures` (js-only, npm-only, python-only, go-only, php-only): each fixture's own job must pass and every other language's job must be skipped.
+  - `check` fails unless every stage succeeded or was skipped, and on drafts.
+  - Run any piece locally with the same script, e.g. `pnpm run lint:yaml` or `pnpm run test:py` (Node from `.nvmrc`).
 - `actions-selftest.yml` (`actions-test`, required): runs restore-cache/save-cache (a miss, a save, then an exact hit in a second job) and setup-pnpm (against `tests/fixtures/pnpm`) on ubuntu and macOS, as consumers call them. `actions-test` fails unless every test job succeeded, and on drafts.
 
 ## Cache rules (restore-cache / save-cache)
