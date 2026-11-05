@@ -73,6 +73,10 @@ runs:
   using: "composite"
   steps:
 
+    # macOS runners have no coreutils timeout, which later steps wrap commands in
+    - shell: bash
+      run: command -v timeout >/dev/null || echo "$GITHUB_ACTION_PATH/../timeout-shim" >> "$GITHUB_PATH"
+
     - name: Decide whether to save
       id: key
       shell: bash

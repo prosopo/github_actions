@@ -1,0 +1,30 @@
+#!/usr/bin/env perl
+# Minimal coreutils `timeout DURATION COMMAND...` for runners without it (macOS):
+# DURATION is N, Ns, Nm or Nh; on expiry the command's process group gets TERM,
+# then KILL after 5s, and this exits 124 like coreutils. Composite actions prepend this directory
+# to PATH only when `command -v timeout` finds nothing.
+use strict;
+use warnings;
+
+my %unit = (s => 1, m => 60, h => 3600);
+my $duration = shift @ARGV // '';
+$duration =~ /^(\d+)([smh]?)$/ or die "timeout: invalid duration '$duration'\n";
+@ARGV or die "timeout: missing command\n";
+my $seconds = $1 * $unit{$2 || 's'};
+
+my $pid = fork() // die "timeout: fork failed: $!\n";
+if ($pid == 0) {
+    setpgrp(0, 0);
+    exec { $ARGV[0] } @ARGV or do { print STDERR "timeout: $ARGV[0]: $!\n"; exit 127 };
+}
+local $SIG{ALRM} = sub {
+    kill 'TERM', -$pid;
+    for (1 .. 50) { last if waitpid($pid, 1) == $pid; select(undef, undef, undef, 0.1) }
+    kill 'KILL', -$pid;
+    waitpid $pid, 0;
+    exit 124;
+};
+alarm $seconds;
+waitpid $pid, 0;
+alarm 0;
+exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
