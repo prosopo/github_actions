@@ -19,6 +19,9 @@ cannot come back after each cleanup. Rules (ids usable in waivers):
   node-version     no step passes a literal with.node-version; read the repo's
                    pin with node-version-file so CI and local runs cannot drift
                    (a matrix value via ${{ matrix.* }} is fine)
+  node-pin         (repo root) .nvmrc, which workflows read, matches
+                   package.json devEngines.runtime.version, which local pnpm
+                   enforces; either file alone is fine
   allow-dirty      cargo is not run with --allow-dirty
   literal-main     no hardcoded 'main' ref outside the on: block
   secret-to-file   a secret is not redirected into a file or GITHUB_ENV
@@ -32,6 +35,7 @@ A waiver without a reason is itself a finding. Rules in UNWAIVABLE ignore waiver
 """
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -233,15 +237,29 @@ def image_files(root: Path) -> list[Path]:
     )
 
 
+def node_pin_problems(root: Path) -> list[Finding]:
+    nvmrc, manifest = root / ".nvmrc", root / "package.json"
+    if not (nvmrc.is_file() and manifest.is_file()):
+        return []
+    runtime = json.loads(manifest.read_text()).get("devEngines", {}).get("runtime", {})
+    pinned = runtime.get("version") if isinstance(runtime, dict) else None
+    workflows = nvmrc.read_text().strip().removeprefix("v")
+    if pinned is None or pinned == workflows:
+        return []
+    return [Finding(nvmrc, 1, "node-pin", f".nvmrc has {workflows} but package.json devEngines.runtime.version is {pinned}")]
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--dir", default=".github/workflows")
     p.add_argument("--images-root", default="", help="Also check compose files and Dockerfiles under this directory.")
+    p.add_argument("--repo-root", default=".", help="Where .nvmrc and package.json are compared.")
     a = p.parse_args(argv)
     files = sorted(Path(a.dir).glob("*.yml")) + sorted(Path(a.dir).glob("*.yaml"))
     found = [f for path in files for f in problems(path)]
     if a.images_root:
         found += [f for path in image_files(Path(a.images_root)) for f in image_problems(path)]
+    found += node_pin_problems(Path(a.repo_root))
     for f in found:
         print(f"::error file={f.path},line={f.line}::[{f.rule}] {f.message}")
     print(f"checked {len(files)} workflow files, {len(found)} findings")

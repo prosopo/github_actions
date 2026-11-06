@@ -1,3 +1,4 @@
+import json
 import tempfile
 import textwrap
 import unittest
@@ -278,6 +279,42 @@ class TestDockerImagePins(unittest.TestCase):
             Path(d, "Dockerfile").write_text("FROM node\n")
             self.assertEqual(workflow_lint.main(["--dir", str(wf), "--images-root", d]), 1)
             self.assertEqual(workflow_lint.main(["--dir", str(wf)]), 0)
+
+
+class TestNodePin(unittest.TestCase):
+    def pin(self, nvmrc: str | None, manifest: dict | None) -> list[str]:
+        with tempfile.TemporaryDirectory() as d:
+            if nvmrc is not None:
+                Path(d, ".nvmrc").write_text(nvmrc)
+            if manifest is not None:
+                Path(d, "package.json").write_text(json.dumps(manifest))
+            return [f.rule for f in workflow_lint.node_pin_problems(Path(d))]
+
+    def runtime(self, version: str) -> dict:
+        return {"devEngines": {"runtime": {"name": "node", "version": version}}}
+
+    def test_match_passes(self) -> None:
+        self.assertEqual(self.pin("24.22.1\n", self.runtime("24.22.1")), [])
+
+    def test_v_prefix_matches(self) -> None:
+        self.assertEqual(self.pin("v24.22.1\n", self.runtime("24.22.1")), [])
+
+    def test_mismatch_fails(self) -> None:
+        self.assertEqual(self.pin("24.22.1\n", self.runtime("24.23.0")), ["node-pin"])
+
+    def test_no_dev_engines_passes(self) -> None:
+        self.assertEqual(self.pin("24.22.1\n", {"name": "x"}), [])
+
+    def test_missing_files_pass(self) -> None:
+        self.assertEqual(self.pin(None, self.runtime("24.22.1")), [])
+        self.assertEqual(self.pin("24\n", None), [])
+
+    def test_main_reports_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "ok.yml").write_text(COMPLIANT)
+            Path(d, ".nvmrc").write_text("24.22.1\n")
+            Path(d, "package.json").write_text(json.dumps(self.runtime("24.22.0")))
+            self.assertEqual(workflow_lint.main(["--dir", d, "--repo-root", d]), 1)
 
 
 class TestMain(unittest.TestCase):
