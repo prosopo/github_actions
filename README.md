@@ -48,6 +48,9 @@ Fails when a workflow in `.github/workflows` breaks a house rule that actionlint
 ### tag-versions
 On push to main, tags each package whose `package.json` version changed since `before` as `<unscoped name>-v<version>`; a changesets `fixed` group gets one tag named after its first entry. Existing tags are skipped and a push with no usable `before` tags nothing. Check out with `fetch-depth: 0` and an app token so the tag push triggers publish workflows. Created tags are in `outputs.tags` (JSON).
 
+### container-logs
+Prints `docker ps -a` and the last `lines` (default 200) of every container's log, one group each, looping `docker ps -aq` so testcontainers and `docker run` containers are covered, not just compose. Add it as the last step of any job that starts containers, with `if: ${{ failure() || cancelled() }}`. Console only (Actions masks secrets there); never upload the logs as artifacts. Never fails the job.
+
 ### detect-languages
 Outputs `has-<lang>` and `<lang>-changed` for js, rust, python, go, php and docker, and `package-manager` (`pnpm` for a root `pnpm-lock.yaml`, else `npm` for a root `package-lock.json`, else empty) (`.github/actions/detect-languages/detect_languages.py`). A language changed when the diff from `base` touches its files; edits under `.github/`, `pnpm-lock.yaml`, `package-lock.json`, `.nvmrc` or `turbo.json` count as changing every present language. No usable `base` (first push, all-zero SHA) means every present language changed. `exclude` lists directories to ignore, such as test fixtures in languages the repo itself does not use.
 

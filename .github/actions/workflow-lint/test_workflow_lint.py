@@ -94,16 +94,37 @@ class TestPrTypes(unittest.TestCase):
         self.assertNotIn("pr-types", rules(COMPLIANT))
 
 
-class TestPrTarget(unittest.TestCase):
-    def test_no_fork_guard(self) -> None:
-        text = COMPLIANT.replace("  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]\n", "  pull_request_target:\n")
-        self.assertEqual(rules(text), ["pr-target", "pr-target"])
+PR_TRIGGER = "  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]\n"
 
-    def test_fork_guard_passes(self) -> None:
-        text = COMPLIANT.replace("  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]\n", "  pull_request_target:\n").replace(
+
+class TestNoPrTarget(unittest.TestCase):
+    def test_mapping_form(self) -> None:
+        found = lint(COMPLIANT.replace(PR_TRIGGER, PR_TRIGGER + "  pull_request_target:\n    types: [opened]\n"))
+        self.assertEqual([(f.rule, f.line) for f in found], [("no-pr-target", 5)])
+
+    def test_string_form(self) -> None:
+        text = COMPLIANT.replace("on:\n" + PR_TRIGGER + "  push:\n    branches: [main]\n", "on: pull_request_target\n")
+        self.assertEqual(rules(text), ["no-pr-target"])
+
+    def test_list_form(self) -> None:
+        text = COMPLIANT.replace("on:\n" + PR_TRIGGER + "  push:\n    branches: [main]\n", "on: [push, pull_request_target]\n")
+        self.assertEqual(rules(text), ["no-pr-target"])
+
+    def test_fork_guard_does_not_exempt(self) -> None:
+        text = COMPLIANT.replace(PR_TRIGGER, "  pull_request_target:\n").replace(
             "github.event.pull_request.draft != true", "github.event.pull_request.head.repo.full_name == github.repository"
-        ).replace("    needs: test\n", "    needs: test\n    if: github.event.pull_request.head.repo.full_name == github.repository\n")
-        self.assertEqual(rules(text), [])
+        )
+        self.assertEqual(rules(text), ["no-pr-target"])
+
+    def test_waiver_does_not_exempt(self) -> None:
+        text = COMPLIANT.replace(PR_TRIGGER, PR_TRIGGER + "  # workflow-lint: allow no-pr-target -- needs secrets\n  pull_request_target:\n")
+        self.assertEqual(rules(text), ["no-pr-target"])
+
+    def test_name_outside_on_block_passes(self) -> None:
+        self.assertEqual(rules(COMPLIANT.replace("echo ok\n  after", "echo pull_request_target\n  after")), [])
+
+    def test_clean_workflow_passes(self) -> None:
+        self.assertNotIn("no-pr-target", rules(COMPLIANT))
 
 
 class TestPermissions(unittest.TestCase):

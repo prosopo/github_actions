@@ -159,3 +159,22 @@ jobs:
           if [ "$FORK_PR" = "true" ]; then echo "fork PR: tests skipped"; exit 0; fi
           # Under act the cache jobs are skipped on purpose; setup-pnpm must still pass.
           for r in $RESULTS; do [ "$r" = "success" ] || { [ "$ACT_RUN" = "true" ] && [ "$r" = "skipped" ]; } || exit 1; done
+
+  container-logs:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+
+      - name: Start a container that exits non-zero
+        timeout-minutes: 3
+        run: timeout 150 docker run --name container-logs-selftest alpine:3.20 sh -c 'echo container-logs-marker; exit 3' || true
+
+      # The marker line must appear in this step's group in the log; the step
+      # itself must pass even though the container failed.
+      - uses: ./.github/actions/container-logs
+        timeout-minutes: 3
