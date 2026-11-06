@@ -85,9 +85,40 @@ class Helpers(unittest.TestCase):
         self.assertEqual(pr.workflow_key(""), "")
 
     def test_pr_line(self) -> None:
-        self.assertEqual(pr.pr_line_kind("a\n  Runner:  Self-Hosted \nb"), "self-hosted")
-        self.assertIsNone(pr.pr_line_kind("the runner: is mentioned inline"))
-        self.assertIsNone(pr.pr_line_kind(None))
+        w: list[str] = []
+        self.assertEqual(pr.pr_line_kind("a\n  Runner:  Self-Hosted \nb", "tests", w), "self-hosted")
+        self.assertIsNone(pr.pr_line_kind("the runner: is mentioned inline", "tests", w))
+        self.assertIsNone(pr.pr_line_kind(None, "tests", w))
+        self.assertEqual(w, [])
+
+    def test_pr_line_workflow_list(self) -> None:
+        w: list[str] = []
+        body = "runner: self-hosted tests,e2e"
+        self.assertEqual(pr.pr_line_kind(body, "tests", w), "self-hosted")
+        self.assertEqual(pr.pr_line_kind(body, "e2e", w), "self-hosted")
+        self.assertIsNone(pr.pr_line_kind(body, "build", w))
+        self.assertIsNone(pr.pr_line_kind("runner: hosted testsuite", "tests", w))
+
+    def test_pr_line_last_wins(self) -> None:
+        w: list[str] = []
+        body = "runner: self-hosted\nrunner: hosted e2e\n"
+        self.assertEqual(pr.pr_line_kind(body, "e2e", w), "hosted")
+        self.assertEqual(pr.pr_line_kind(body, "tests", w), "self-hosted")
+        self.assertEqual(pr.pr_line_kind("runner: hosted\nrunner: self-hosted", "tests", w), "self-hosted")
+
+    def test_pr_line_unknown_warns_and_keeps_earlier(self) -> None:
+        w: list[str] = []
+        self.assertEqual(pr.pr_line_kind("runner: hosted\nrunner: turbo", "tests", w), "hosted")
+        self.assertEqual(len(w), 1)
+        self.assertIn("turbo", w[0])
+        w.clear()
+        self.assertIsNone(pr.pr_line_kind("runner: turbo e2e", "tests", w))
+        self.assertEqual(w, [])
+
+    def test_pr_line_absent_or_other_workflow_uses_map(self) -> None:
+        d = decide(pr_body="runner: hosted e2e", runner_map='{"tests":"self-hosted"}')
+        self.assertEqual(d.kind, pr.SELF_HOSTED)
+        self.assertIn("GH_RUNNER_MAP", d.reason)
 
     def test_size_labels_only_for_self_hosted(self) -> None:
         sizes = {"build": ["xlarge"], "lint": ["small"]}
