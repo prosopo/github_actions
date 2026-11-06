@@ -11,6 +11,8 @@
 #   selftest-static / -test   the same stages on one fixture per language
 #                             (.github/fixtures): each fixture's own job must
 #                             pass and every other language's job must skip
+#   selftest-pick-runner(-use) pick-runner.yml as a consumer calls it, plus a
+#                             job running on its answer
 #   check                     the one job the main ruleset requires
 #
 # Hosted runners only: this repo is public, and a self-hosted runner would run
@@ -128,6 +130,37 @@ jobs:
       go-command: ${{ matrix.go || 'exit 1' }}
       php-command: ${{ matrix.php || 'exit 1' }}
 
+  # No GH_RUNNER_MAP is set here and runner is hosted, so nothing reaches a
+  # self-hosted runner; a broken output shape fails in the -use job.
+  selftest-pick-runner:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    uses: ./.github/workflows/pick-runner.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      runner: hosted
+      sizes: '{"use":["xlarge"]}'
+
+  selftest-pick-runner-use:
+    needs: selftest-pick-runner
+    runs-on: ${{ fromJSON(needs.selftest-pick-runner.outputs.labels).use }}
+    timeout-minutes: 5
+    steps:
+      - name: Outputs have the documented shape
+        timeout-minutes: 2
+        env:
+          KIND: ${{ needs.selftest-pick-runner.outputs.kind }}
+          REASON: ${{ needs.selftest-pick-runner.outputs.reason }}
+          DEFAULT: ${{ needs.selftest-pick-runner.outputs.default }}
+          LABELS: ${{ needs.selftest-pick-runner.outputs.labels }}
+        run: |
+          echo "kind=$KIND reason=$REASON default=$DEFAULT labels=$LABELS"
+          test "$KIND" = hosted
+          test "$DEFAULT" = '["ubuntu-latest"]'
+          test "$LABELS" = '{"use": ["ubuntu-latest"]}'
+
   # Named `check` because the main ruleset requires a status context of exactly
   # that name. Fails unless every stage succeeded or was skipped (a stage job
   # skips when its language is absent or unchanged); a draft fails so it never
@@ -135,7 +168,7 @@ jobs:
   # only merge after a maintainer reruns it from a branch.
   check:
     if: ${{ always() }}
-    needs: [static, test, selftest-static, selftest-test]
+    needs: [static, test, selftest-static, selftest-test, selftest-pick-runner, selftest-pick-runner-use]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

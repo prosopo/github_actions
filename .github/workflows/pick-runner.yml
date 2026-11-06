@@ -1,0 +1,98 @@
+# Picks runs-on labels for the calling workflow's jobs. Called with workflow_call
+# as the first job of a stage or entry workflow; the other jobs `needs:` it and
+# read its outputs, because runs-on is evaluated before any step can choose.
+# Precedence (fork PR > runner input > `runner:` PR line > GH_RUNNER_MAP > hosted)
+# and the reasons are in .github/scripts/pick_runner.py; usage is in the README.
+# Follow the existing layout of this repo's reusable workflows; a structural
+# change needs a justification in the PR description and a .github/ code owner.
+#
+# Not fork-guarded on purpose: it reads only the PR body and repo vars, and its
+# answer for a fork PR (hosted) is what lets the caller's skipped-or-hosted jobs
+# resolve runs-on at all.
+
+name: pick-runner
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions holding the script; pass the SHA this workflow is pinned at (see cache-main.yml)."
+        type: string
+        required: true
+      runner:
+        description: "auto | hosted | self-hosted. Overrides the PR line and GH_RUNNER_MAP (not the fork rule). Callers expose it as a choice input on workflow_dispatch/workflow_call and pass it through."
+        type: string
+        default: "auto"
+      sizes:
+        description: 'JSON object of job -> size label(s) appended on self-hosted only, e.g. {"build":["xlarge"]}. Each named job gets its own entry in outputs.labels.'
+        type: string
+        default: ""
+      workflow:
+        description: "GH_RUNNER_MAP key; empty means the caller's workflow file name without .yml."
+        type: string
+        default: ""
+      concurrency-key:
+        description: "Concurrency group override; the default is unique per run attempt and workflow key."
+        type: string
+        default: ""
+    outputs:
+      kind:
+        description: "hosted or self-hosted."
+        value: ${{ jobs.pick.outputs.kind }}
+      reason:
+        description: "Why that kind was chosen."
+        value: ${{ jobs.pick.outputs.reason }}
+      default:
+        description: "JSON label list for jobs not named in sizes; use it via fromJSON in runs-on."
+        value: ${{ jobs.pick.outputs.default }}
+      labels:
+        description: "JSON object job -> label list for jobs named in sizes; read one with fromJSON(...).<job>."
+        value: ${{ jobs.pick.outputs.labels }}
+
+concurrency:
+  group: pick-runner-${{ inputs.concurrency-key || format('{0}-{1}-{2}', github.run_id, github.run_attempt, inputs.workflow) }}
+  cancel-in-progress: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  pick:
+    # Always hosted: it decides where everything else runs, so it cannot depend
+    # on self-hosted runners being up.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      kind: ${{ steps.pick.outputs.kind }}
+      reason: ${{ steps.pick.outputs.reason }}
+      default: ${{ steps.pick.outputs.default }}
+      labels: ${{ steps.pick.outputs.labels }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 3
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Pick runner
+        id: pick
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_RUNNER_MAP: ${{ vars.GH_RUNNER_MAP }}
+          GH_RUNNER: ${{ vars.GH_RUNNER }}
+          RUNNER_INPUT: ${{ inputs.runner }}
+          SIZES: ${{ inputs.sizes }}
+          WORKFLOW_KEY: ${{ inputs.workflow }}
+        run: |
+          timeout 120 python3 .shared-actions/.github/scripts/pick_runner.py \
+            --runner "$RUNNER_INPUT" --sizes "$SIZES" --workflow "$WORKFLOW_KEY"
