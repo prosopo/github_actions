@@ -65,7 +65,8 @@ jobs:
       # The JS here is only stage fixtures; the js job is where the
       # repo-wide linters run, since every change under .github/ selects it.
       js-command: pnpm run setup:lint-tools && PATH="$HOME/.local/bin:$PATH" pnpm run lint
-      python-command: pnpm run lint:py
+      # Fails if the stage left its own .shared-actions checkout in view.
+      python-command: test ! -e .shared-actions && pnpm run lint:py
       rust-command: exit 1
       go-command: exit 1
       php-command: exit 1
@@ -78,7 +79,7 @@ jobs:
     with:
       actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
       js-command: echo "no JS unit tests; JS here is only stage fixtures"
-      python-command: pnpm run test:py
+      python-command: test ! -e .shared-actions && pnpm run test:py
       rust-command: exit 1
       go-command: exit 1
       php-command: exit 1
