@@ -2,6 +2,7 @@ import json
 import random
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 import auto_update_pr as aup
 
@@ -137,15 +138,28 @@ class HelpersTest(unittest.TestCase):
     def test_status_context_error_is_failure(self) -> None:
         self.assertTrue(aup.ci_failed(aup.PR(1, False, True, set(), "s", [{"state": "ERROR"}])))
 
+    def _run_main(self, argv: list[str]) -> tuple[list[tuple[str, str]], list[list[str]]]:
+        seen: list[tuple[str, str]] = []
+        calls: list[list[str]] = []
+
+        def fake_gh(args: list[str]) -> str:
+            calls.append(args)
+            return "trunk\n"
+
+        with mock.patch.object(aup.Updater, "step", lambda self, event, now: seen.append((event, self.base))), \
+                mock.patch.object(aup, "gh", fake_gh):
+            self.assertEqual(aup.main(argv), 0)
+        return seen, calls
+
     def test_main_parses_args(self) -> None:
-        orig = aup.Updater.step
-        seen: list[str] = []
-        aup.Updater.step = lambda self, event, now: seen.append(event)  # type: ignore[method-assign]
-        try:
-            self.assertEqual(aup.main(["--repo", "o/r", "--event", "push"]), 0)
-        finally:
-            aup.Updater.step = orig  # type: ignore[method-assign]
-        self.assertEqual(seen, ["push"])
+        seen, calls = self._run_main(["--repo", "o/r", "--base", "dev", "--event", "push"])
+        self.assertEqual(seen, [("push", "dev")])
+        self.assertEqual(calls, [])
+
+    def test_main_defaults_base_to_the_repo_default_branch(self) -> None:
+        seen, calls = self._run_main(["--repo", "o/r", "--event", "push"])
+        self.assertEqual(seen, [("push", "trunk")])
+        self.assertEqual(calls, [["api", "repos/o/r", "--jq", ".default_branch"]])
 
 
 if __name__ == "__main__":
