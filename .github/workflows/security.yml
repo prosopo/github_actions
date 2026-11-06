@@ -15,7 +15,7 @@ on:
         description: "Commit of prosopo/github_actions whose actions this uses; pass the SHA the caller pins this workflow at (see cache-main.yml)."
         type: string
         required: true
-      runs-on: {description: "Runner label.", type: string, default: "ubuntu-latest"}
+      runs-on: {description: "Runner: a label, or a JSON array of labels (pick-runner output).", type: string, default: "ubuntu-latest"}
       dependency-review-severity:
         description: "Lowest severity (low, moderate, high, critical) of a newly added vulnerable dependency that fails the PR."
         type: string
@@ -31,7 +31,7 @@ permissions:
 jobs:
   scan:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -72,7 +72,7 @@ jobs:
 
   semgrep:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: 30
     container:
       image: semgrep/semgrep:1.145.0
@@ -116,7 +116,7 @@ jobs:
   # head lockfiles with osv-scanner and diff (scripts/dependency_diff.py).
   dependency-review:
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
