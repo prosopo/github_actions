@@ -94,7 +94,7 @@ jobs:
         include:
           - {fixture: js-only, js: pnpm run lint}
           - {fixture: npm-only, js: npm run lint}
-          - {fixture: python-only, python: python3 -m py_compile test_fixture.py}
+          - {fixture: python-only, python: test ! -e "$GITHUB_WORKSPACE/.shared-actions" && python3 -m py_compile test_fixture.py}
           - {fixture: go-only, go: go vet ./...}
           - {fixture: php-only, php: composer run-script lint}
     uses: ./.github/workflows/static.yml
@@ -116,7 +116,7 @@ jobs:
         include:
           - {fixture: js-only, js: pnpm run test}
           - {fixture: npm-only, js: npm test}
-          - {fixture: python-only, python: python3 -m unittest -q}
+          - {fixture: python-only, python: test ! -e "$GITHUB_WORKSPACE/.shared-actions" && python3 -m unittest -q}
           - {fixture: go-only, go: go test ./...}
           - {fixture: php-only, php: composer run-script test}
     uses: ./.github/workflows/test.yml
