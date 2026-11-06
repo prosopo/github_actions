@@ -30,6 +30,10 @@ on:
         description: "Whitespace-separated directories (relative to working-directory) language detection ignores."
         type: string
         default: ""
+      turbo-cache-artifact:
+        description: "Turbo cache artifact from build.yml to restore before the js job, so it reuses that run's builds; empty skips it."
+        type: string
+        default: ""
       js-command:
         description: "Command for the js job."
         type: string
@@ -126,6 +130,12 @@ jobs:
         run: timeout 840 npm ci --no-audit --no-fund
       # The caller's own lint/tests must not see this repo's checkout; it is
       # put back before post steps, which re-read the local actions.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        if: ${{ inputs.turbo-cache-artifact != '' }}
+        timeout-minutes: 10
+        with:
+          name: ${{ inputs.turbo-cache-artifact }}
+          path: ${{ inputs.working-directory }}/.turbo-cache
       - name: hide shared actions
         timeout-minutes: 1
         run: mv .shared-actions "$RUNNER_TEMP/shared-actions"
@@ -134,7 +144,10 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         env:
           CMD: ${{ inputs.js-command }}
-        run: eval "$CMD"
+          RESTORED_CACHE: ${{ inputs.turbo-cache-artifact }}
+        run: |
+          if [ -n "$RESTORED_CACHE" ]; then export TURBO_CACHE_DIR="$PWD/.turbo-cache"; fi
+          eval "$CMD"
       - name: restore shared actions
         if: ${{ always() }}
         timeout-minutes: 1
