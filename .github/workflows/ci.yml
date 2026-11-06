@@ -62,6 +62,8 @@ jobs:
     uses: ./.github/workflows/static.yml
     with:
       actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      # JSON form, as pick-runner outputs it; the fixture calls below use a plain label.
+      runs-on: '["ubuntu-latest"]'
       # The JS here is only stage fixtures; the js job is where the
       # repo-wide linters run, since every change under .github/ selects it.
       js-command: pnpm run setup:lint-tools && PATH="$HOME/.local/bin:$PATH" pnpm run lint
