@@ -95,7 +95,7 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
 ## This repo's own CI
 
 - `ci.yml` (`check`, required): calls this repo's own `static.yml` and `test.yml` from the PR's checkout, so a PR exercises its edits to them.
-  - `static`: the js job runs `pnpm run setup:lint-tools` then `pnpm run lint` (package.json: actionlint, yamllint, taplo, shellcheck of composite action shell via `.github/scripts/lint_composite_shell.py`, `.github/scripts/validate_actions.py` for every action.yml's metadata, which actionlint does not read, and check-timeouts); the python job byte-compiles every script (`lint:py`).
+  - `static`: the js job runs `pnpm run setup:lint-tools` then `pnpm run lint` (package.json: actionlint, yamllint, taplo, shellcheck of composite action shell via `.github/scripts/lint_composite_shell.py`, `.github/scripts/validate_actions.py` for every action.yml's metadata, which actionlint does not read, and check-timeouts); the python job runs `pnpm run setup:py-tools` (pinned ruff) then `pnpm run lint:py`, which byte-compiles every script under `.github` and runs `ruff check` over them with the rules in `ruff.toml`.
   - `test`: the python job runs `pnpm run test:py` (`.github/scripts/run_python_tests.py`: unittest in every directory holding `test_*.py`, found by glob).
   - `selftest-static` / `selftest-test`: the same stages against one fixture per language under `.github/fixtures` (js-only, npm-only, python-only, go-only, php-only): each fixture's own job must pass and every other language's job must be skipped.
   - `check` fails unless every stage succeeded or was skipped, and on drafts.

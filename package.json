@@ -12,7 +12,8 @@
 		"lint:shell": "python3 .github/scripts/lint_composite_shell.py",
 		"lint:actions": "python3 .github/scripts/validate_actions.py",
 		"lint:timeouts": "python3 .github/actions/check-timeouts/check_timeouts.py --dir .github/workflows --actions-dir .github/actions",
-		"lint:py": "python3 -m compileall -q .github",
+		"setup:py-tools": "python3 -m pip install --quiet --user --break-system-packages ruff==0.17.3",
+		"lint:py": "python3 -m compileall -q .github && python3 -m ruff check .github",
 		"test": "pnpm run test:py",
 		"test:py": "python3 .github/scripts/run_python_tests.py --root .github"
 	}

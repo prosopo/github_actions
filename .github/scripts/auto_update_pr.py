@@ -22,9 +22,9 @@ import random
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable
 
 RUNNING = {"QUEUED", "IN_PROGRESS", "PENDING", "WAITING", "REQUESTED"}
 FAILED = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}

@@ -1,0 +1,7 @@
+# Lint for every Python script under .github (pnpm run lint:py). Rules are
+# listed explicitly so a ruff upgrade cannot change what CI enforces.
+target-version = "py310"
+line-length = 140
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
