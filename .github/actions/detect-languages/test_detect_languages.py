@@ -1,6 +1,6 @@
 import unittest
 
-from detect_languages import detect, package_manager
+from detect_languages import detect, package_manager, without
 
 
 class DetectTest(unittest.TestCase):
@@ -41,6 +41,18 @@ class DetectTest(unittest.TestCase):
         out = detect(["a.ts", "x.php"], ["package-lock.json"])
         self.assertTrue(out["js-changed"])
         self.assertTrue(out["php-changed"])
+
+
+class WithoutTest(unittest.TestCase):
+    def test_drops_paths_under_excluded_dirs(self) -> None:
+        paths = [".github/fixtures/go-only/main.go", ".github/scripts/a.py", "x.go"]
+        self.assertEqual(without(paths, [".github/fixtures"]), [".github/scripts/a.py", "x.go"])
+
+    def test_prefix_is_a_directory_not_a_string_prefix(self) -> None:
+        self.assertEqual(without(["fixtures2/a.go"], ["fixtures/"]), ["fixtures2/a.go"])
+
+    def test_no_exclusions_keeps_everything(self) -> None:
+        self.assertEqual(without(["a.go"], [""]), ["a.go"])
 
 
 class PackageManagerTest(unittest.TestCase):

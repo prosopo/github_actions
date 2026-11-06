@@ -26,6 +26,10 @@ on:
         description: "Directory the repo's workspace lives in (the self-test points this at a fixture)."
         type: string
         default: "."
+      exclude-paths:
+        description: "Whitespace-separated directories (relative to working-directory) language detection ignores."
+        type: string
+        default: ""
       js-command:
         description: "Command for the js job."
         type: string
@@ -83,6 +87,7 @@ jobs:
         timeout-minutes: 3
         with:
           dir: ${{ inputs.working-directory }}
+          exclude: ${{ inputs.exclude-paths }}
           base: ${{ github.event.pull_request.base.sha || github.event.before }}
 
   js:
@@ -119,12 +124,21 @@ jobs:
         timeout-minutes: 15
         working-directory: ${{ inputs.working-directory }}
         run: timeout 840 npm ci --no-audit --no-fund
+      # The caller's own lint/tests must not see this repo's checkout; it is
+      # put back before post steps, which re-read the local actions.
+      - name: hide shared actions
+        timeout-minutes: 1
+        run: mv .shared-actions "$RUNNER_TEMP/shared-actions"
       - name: static js
         timeout-minutes: ${{ inputs.timeout-minutes }}
         working-directory: ${{ inputs.working-directory }}
         env:
           CMD: ${{ inputs.js-command }}
         run: eval "$CMD"
+      - name: restore shared actions
+        if: ${{ always() }}
+        timeout-minutes: 1
+        run: if [ -d "$RUNNER_TEMP/shared-actions" ]; then mv "$RUNNER_TEMP/shared-actions" .shared-actions; fi
 
   rust:
     needs: changes
@@ -151,12 +165,21 @@ jobs:
         with:
           node-version-file: ${{ inputs.working-directory }}/.nvmrc
           working-directory: ${{ inputs.working-directory }}
+      # The caller's own lint/tests must not see this repo's checkout; it is
+      # put back before post steps, which re-read the local actions.
+      - name: hide shared actions
+        timeout-minutes: 1
+        run: mv .shared-actions "$RUNNER_TEMP/shared-actions"
       - name: static rust
         timeout-minutes: ${{ inputs.timeout-minutes }}
         working-directory: ${{ inputs.working-directory }}
         env:
           CMD: ${{ inputs.rust-command }}
         run: eval "$CMD"
+      - name: restore shared actions
+        if: ${{ always() }}
+        timeout-minutes: 1
+        run: if [ -d "$RUNNER_TEMP/shared-actions" ]; then mv "$RUNNER_TEMP/shared-actions" .shared-actions; fi
 
   python:
     needs: changes
@@ -183,12 +206,21 @@ jobs:
         with:
           node-version-file: ${{ inputs.working-directory }}/.nvmrc
           working-directory: ${{ inputs.working-directory }}
+      # The caller's own lint/tests must not see this repo's checkout; it is
+      # put back before post steps, which re-read the local actions.
+      - name: hide shared actions
+        timeout-minutes: 1
+        run: mv .shared-actions "$RUNNER_TEMP/shared-actions"
       - name: static python
         timeout-minutes: ${{ inputs.timeout-minutes }}
         working-directory: ${{ inputs.working-directory }}
         env:
           CMD: ${{ inputs.python-command }}
         run: eval "$CMD"
+      - name: restore shared actions
+        if: ${{ always() }}
+        timeout-minutes: 1
+        run: if [ -d "$RUNNER_TEMP/shared-actions" ]; then mv "$RUNNER_TEMP/shared-actions" .shared-actions; fi
 
   go:
     needs: changes
@@ -212,12 +244,21 @@ jobs:
         with:
           go-version-file: ${{ inputs.working-directory }}/go.mod
           cache-dependency-path: ${{ inputs.working-directory }}/go.sum
+      # The caller's own lint/tests must not see this repo's checkout; it is
+      # put back before post steps, which re-read the local actions.
+      - name: hide shared actions
+        timeout-minutes: 1
+        run: mv .shared-actions "$RUNNER_TEMP/shared-actions"
       - name: static go
         timeout-minutes: ${{ inputs.timeout-minutes }}
         working-directory: ${{ inputs.working-directory }}
         env:
           CMD: ${{ inputs.go-command }}
         run: eval "$CMD"
+      - name: restore shared actions
+        if: ${{ always() }}
+        timeout-minutes: 1
+        run: if [ -d "$RUNNER_TEMP/shared-actions" ]; then mv "$RUNNER_TEMP/shared-actions" .shared-actions; fi
 
   php:
     needs: changes
@@ -246,9 +287,18 @@ jobs:
         timeout-minutes: 10
         working-directory: ${{ inputs.working-directory }}
         run: timeout 540 composer install --no-interaction --no-progress
+      # The caller's own lint/tests must not see this repo's checkout; it is
+      # put back before post steps, which re-read the local actions.
+      - name: hide shared actions
+        timeout-minutes: 1
+        run: mv .shared-actions "$RUNNER_TEMP/shared-actions"
       - name: static php
         timeout-minutes: ${{ inputs.timeout-minutes }}
         working-directory: ${{ inputs.working-directory }}
         env:
           CMD: ${{ inputs.php-command }}
         run: eval "$CMD"
+      - name: restore shared actions
+        if: ${{ always() }}
+        timeout-minutes: 1
+        run: if [ -d "$RUNNER_TEMP/shared-actions" ]; then mv "$RUNNER_TEMP/shared-actions" .shared-actions; fi

@@ -1,0 +1,152 @@
+# Entry point for this repo's CI: calls the shared stage workflows (static.yml,
+# test.yml) that every Prosopo repo calls, from this checkout, so a PR runs its
+# own edits to them. Follow the existing layout: work goes in a stage workflow
+# or a package.json script, not here; a new workflow, stage or structural
+# change needs a justification in the PR description and review by the
+# .github/ code owners. actions-selftest.yml stays separate: it runs the
+# composite actions on macOS too and needs `actions: write`.
+#
+# Jobs:
+#   static / test             this repo, via package.json lint/test scripts
+#   selftest-static / -test   the same stages on one fixture per language
+#                             (.github/fixtures): each fixture's own job must
+#                             pass and every other language's job must skip
+#   check                     the one job the main ruleset requires
+#
+# Hosted runners only: this repo is public, and a self-hosted runner would run
+# PR code on a persistent machine.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      concurrency-key:
+        description: "Concurrency group; defaults to the PR number or ref."
+        type: string
+        default: ""
+
+concurrency:
+  group: ci-${{ inputs.concurrency-key || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+env:
+  NODE_OPTIONS: --max-old-space-size=4096
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_NET_RETRY: "10"
+  RUST_BACKTRACE: short
+  FORCE_COLOR: "1"
+  TURBO_TELEMETRY_DISABLED: "1"
+  DO_NOT_TRACK: "1"
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  static:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    uses: ./.github/workflows/static.yml
+    with:
+      actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      # The JS here is only stage fixtures; the js job is where the
+      # repo-wide linters run, since every change under .github/ selects it.
+      js-command: pnpm run setup:lint-tools && PATH="$HOME/.local/bin:$PATH" pnpm run lint
+      # Fails if the stage left its own .shared-actions checkout in view.
+      python-command: test ! -e .shared-actions && pnpm run lint:py
+      rust-command: exit 1
+      go-command: exit 1
+      php-command: exit 1
+      # The fixtures' Go and PHP belong to the selftest jobs, not this repo.
+      exclude-paths: .github/fixtures
+
+  test:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    uses: ./.github/workflows/test.yml
+    with:
+      actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      js-command: echo "no JS unit tests; JS here is only stage fixtures"
+      python-command: test ! -e .shared-actions && pnpm run test:py
+      rust-command: exit 1
+      go-command: exit 1
+      php-command: exit 1
+      # The fixtures' Go and PHP belong to the selftest jobs, not this repo.
+      exclude-paths: .github/fixtures
+
+  selftest-static:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {fixture: js-only, js: pnpm run lint}
+          - {fixture: npm-only, js: npm run lint}
+          - {fixture: python-only, python: python3 -m py_compile test_fixture.py}
+          - {fixture: go-only, go: go vet ./...}
+          - {fixture: php-only, php: composer run-script lint}
+    uses: ./.github/workflows/static.yml
+    with:
+      actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      working-directory: .github/fixtures/${{ matrix.fixture }}
+      # Fail loudly if detection wrongly runs a language the fixture lacks.
+      js-command: ${{ matrix.js || 'exit 1' }}
+      rust-command: exit 1
+      python-command: ${{ matrix.python || 'exit 1' }}
+      go-command: ${{ matrix.go || 'exit 1' }}
+      php-command: ${{ matrix.php || 'exit 1' }}
+
+  selftest-test:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {fixture: js-only, js: pnpm run test}
+          - {fixture: npm-only, js: npm test}
+          - {fixture: python-only, python: python3 -m unittest -q}
+          - {fixture: go-only, go: go test ./...}
+          - {fixture: php-only, php: composer run-script test}
+    uses: ./.github/workflows/test.yml
+    with:
+      actions-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      working-directory: .github/fixtures/${{ matrix.fixture }}
+      # Fail loudly if detection wrongly runs a language the fixture lacks.
+      js-command: ${{ matrix.js || 'exit 1' }}
+      rust-command: exit 1
+      python-command: ${{ matrix.python || 'exit 1' }}
+      go-command: ${{ matrix.go || 'exit 1' }}
+      php-command: ${{ matrix.php || 'exit 1' }}
+
+  # Named `check` because the main ruleset requires a status context of exactly
+  # that name. Fails unless every stage succeeded or was skipped (a stage job
+  # skips when its language is absent or unchanged); a draft fails so it never
+  # shows as passing, and a fork PR passes with everything skipped, so it can
+  # only merge after a maintainer reruns it from a branch.
+  check:
+    if: ${{ always() }}
+    needs: [static, test, selftest-static, selftest-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every stage passed or was skipped
+        timeout-minutes: 2
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
+        run: |
+          echo "results: $RESULTS"
+          if [ "$DRAFT" = "true" ]; then echo "draft PR: stages skipped; mark it ready to run them"; exit 1; fi
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done

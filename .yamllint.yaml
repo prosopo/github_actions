@@ -18,3 +18,7 @@ rules:
     max-spaces-inside: 1
   empty-lines:
     max: 2
+
+# pnpm install output: CI installs before linting.
+ignore: |
+  node_modules/

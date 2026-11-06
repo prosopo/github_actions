@@ -49,7 +49,7 @@ Fails when a workflow in `.github/workflows` breaks a house rule that actionlint
 On push to main, tags each package whose `package.json` version changed since `before` as `<unscoped name>-v<version>`; a changesets `fixed` group gets one tag named after its first entry. Existing tags are skipped and a push with no usable `before` tags nothing. Check out with `fetch-depth: 0` and an app token so the tag push triggers publish workflows. Created tags are in `outputs.tags` (JSON).
 
 ### detect-languages
-Outputs `has-<lang>` and `<lang>-changed` for js, rust, python, go, php and docker, and `package-manager` (`pnpm` for a root `pnpm-lock.yaml`, else `npm` for a root `package-lock.json`, else empty) (`.github/actions/detect-languages/detect_languages.py`). A language changed when the diff from `base` touches its files; edits under `.github/`, `pnpm-lock.yaml`, `package-lock.json`, `.nvmrc` or `turbo.json` count as changing every present language. No usable `base` (first push, all-zero SHA) means every present language changed.
+Outputs `has-<lang>` and `<lang>-changed` for js, rust, python, go, php and docker, and `package-manager` (`pnpm` for a root `pnpm-lock.yaml`, else `npm` for a root `package-lock.json`, else empty) (`.github/actions/detect-languages/detect_languages.py`). A language changed when the diff from `base` touches its files; edits under `.github/`, `pnpm-lock.yaml`, `package-lock.json`, `.nvmrc` or `turbo.json` count as changing every present language. No usable `base` (first push, all-zero SHA) means every present language changed. `exclude` lists directories to ignore, such as test fixtures in languages the repo itself does not use.
 
 ## Reusable workflows
 
@@ -59,17 +59,21 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
 - `prime-runners.yml`: one job per online self-hosted runner VM (`vm-*` label, `host-*` fallback) filling its local pnpm store, cargo registry, Playwright and turbo build of main. Needs a token that can list org runners.
 - `cancel-runs-on-pr-close.yml`: on PR close, cancels its in-flight runs and deletes its cache entries.
 - Stage workflows, one per CI stage, usable unchanged by captcha, captcha-private and Protect. Fork PRs and drafts are skipped.
-  - `static.yml` / `test.yml`: a `changes` job (detect-languages), then js, rust, python, go and php jobs, each running only when the repo has that language and the change touched it. pnpm is set up only in pnpm repos, and npm repos get `npm ci` in the js job, so npm, Go, PHP and Python-only repos need no pnpm. Default commands are the turbo tasks every pnpm repo exposes (`lint`, `lint:rust`, `lint:py` / `test`, `test:rust`, `test:py`), `go vet`/`go test` and `composer run-script lint`/`test`; override with `js-command` etc.
+  - `static.yml` / `test.yml`: a `changes` job (detect-languages), then js, rust, python, go and php jobs, each running only when the repo has that language and the change touched it. pnpm is set up only in pnpm repos, and npm repos get `npm ci` in the js job, so npm, Go, PHP and Python-only repos need no pnpm. Default commands are the turbo tasks every pnpm repo exposes (`lint`, `lint:rust`, `lint:py` / `test`, `test:rust`, `test:py`), `go vet`/`go test` and `composer run-script lint`/`test`; override with `js-command` etc., and hide directories from detection with `exclude-paths`.
   - `build.yml` (pnpm + turbo repos): one `turbo run build`, uploading the turbo cache as an artifact for later stages.
   - `e2e.yml`: restores that cache, starts only the services in the repo's own compose file (none if absent), runs `test:e2e`.
   - `security.yml`: `pnpm audit` or `npm audit` by the root lockfile, `cargo audit` (Rust repos), gitleaks.
   - `pr-housekeeping.yml`: requires a `.changeset/*.md` when `packages/` changed (repos with changesets), rejects WIP titles.
-  - `stage-workflows-selftest.yml` runs static and test against one fixture per language under `.github/fixtures` (js-only, npm-only, python-only, go-only, php-only): each fixture's own job must pass and every other language's job must be skipped.
 - `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
 
 ## This repo's own CI
 
-- `lint.yml` (`check`, required): actionlint, yamllint, taplo, shellcheck of composite action shell, `.github/scripts/validate_actions.py` (every action.yml's metadata: required keys, input/output descriptions, a `shell` on each composite `run` step, which actionlint does not read), the Python unit tests and the timeout check.
+- `ci.yml` (`check`, required): calls this repo's own `static.yml` and `test.yml` from the PR's checkout, so a PR exercises its edits to them.
+  - `static`: the js job runs `pnpm run setup:lint-tools` then `pnpm run lint` (package.json: actionlint, yamllint, taplo, shellcheck of composite action shell via `.github/scripts/lint_composite_shell.py`, `.github/scripts/validate_actions.py` for every action.yml's metadata, which actionlint does not read, and check-timeouts); the python job byte-compiles every script (`lint:py`).
+  - `test`: the python job runs `pnpm run test:py` (`.github/scripts/run_python_tests.py`: unittest in every directory holding `test_*.py`, found by glob).
+  - `selftest-static` / `selftest-test`: the same stages against one fixture per language under `.github/fixtures` (js-only, npm-only, python-only, go-only, php-only): each fixture's own job must pass and every other language's job must be skipped.
+  - `check` fails unless every stage succeeded or was skipped, and on drafts.
+  - Run any piece locally with the same script, e.g. `pnpm run lint:yaml` or `pnpm run test:py` (Node from `.nvmrc`).
 - `actions-selftest.yml` (`actions-test`, required): runs restore-cache/save-cache (a miss, a save, then an exact hit in a second job) and setup-pnpm (against `tests/fixtures/pnpm`) on ubuntu and macOS, as consumers call them. `actions-test` fails unless every test job succeeded, and on drafts.
 
 ## Cache rules (restore-cache / save-cache)

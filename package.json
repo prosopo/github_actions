@@ -1,0 +1,19 @@
+{
+	"name": "@prosopo/github_actions",
+	"private": true,
+	"packageManager": "pnpm@11.27.1",
+	"description": "Lint and test entry points for this repo. CI runs them through the shared static and test stage workflows (.github/workflows/ci.yml).",
+	"scripts": {
+		"setup:lint-tools": "bash .github/scripts/install_lint_tools.sh",
+		"lint": "pnpm run lint:workflows && pnpm run lint:yaml && pnpm run lint:toml && pnpm run lint:shell && pnpm run lint:actions && pnpm run lint:timeouts",
+		"lint:workflows": "actionlint -color",
+		"lint:yaml": "yamllint --strict .",
+		"lint:toml": "taplo lint && taplo fmt --check --diff",
+		"lint:shell": "python3 .github/scripts/lint_composite_shell.py",
+		"lint:actions": "python3 .github/scripts/validate_actions.py",
+		"lint:timeouts": "python3 .github/actions/check-timeouts/check_timeouts.py --dir .github/workflows --actions-dir .github/actions",
+		"lint:py": "python3 -m compileall -q .github",
+		"test": "pnpm run test:py",
+		"test:py": "python3 .github/scripts/run_python_tests.py --root .github"
+	}
+}

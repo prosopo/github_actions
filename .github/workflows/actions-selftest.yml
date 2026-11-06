@@ -26,7 +26,7 @@ permissions:
 
 defaults:
   run:
-    shell: bash
+    shell: bash --noprofile --norc -euo pipefail {0}
 
 env:
   # Unique per run and attempt so the first restore is always a miss.
@@ -34,7 +34,9 @@ env:
 
 jobs:
   cache-save:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
+    # Skipped under act, whose default actor is nektos/act (a job-level `if`
+    # cannot read env.ACT): saving writes to the repo's GitHub cache.
+    if: ${{ github.actor != 'nektos/act' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)) }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -148,10 +150,12 @@ jobs:
         timeout-minutes: 1
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
+          ACT_RUN: ${{ github.actor == 'nektos/act' }}
           FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
           DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
         run: |
           echo "results: $RESULTS"
           if [ "$DRAFT" = "true" ]; then echo "draft PR: tests skipped; mark it ready to run them"; exit 1; fi
           if [ "$FORK_PR" = "true" ]; then echo "fork PR: tests skipped"; exit 0; fi
-          for r in $RESULTS; do [ "$r" = "success" ] || exit 1; done
+          # Under act the cache jobs are skipped on purpose; setup-pnpm must still pass.
+          for r in $RESULTS; do [ "$r" = "success" ] || { [ "$ACT_RUN" = "true" ] && [ "$r" = "skipped" ]; } || exit 1; done
