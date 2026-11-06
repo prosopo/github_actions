@@ -261,9 +261,23 @@ def pnpm_workspace(root: Path) -> list[str] | None:
     return None
 
 
+def workspace_glob_match(rel: str, glob: str) -> bool:
+    """pnpm/npm workspace glob semantics: `*` stays within one path segment, `**` spans any number.
+
+    fnmatch alone lets `*` cross `/`, which made `captcha/integration/*` claim packages nested deeper.
+    """
+    def match(parts: list[str], pats: list[str]) -> bool:
+        if not pats:
+            return not parts
+        if pats[0] == "**":
+            return any(match(parts[i:], pats[1:]) for i in range(len(parts) + 1))
+        return bool(parts) and fnmatch.fnmatchcase(parts[0], pats[0]) and match(parts[1:], pats[1:])
+    return match(rel.split("/"), glob.strip("/").split("/"))
+
+
 def in_workspace(rel: str, globs: list[str]) -> bool:
     inc = [g for g in globs if not g.startswith("!")]
     exc = [g[1:] for g in globs if g.startswith("!")]
     if rel == ".":
         return True
-    return any(fnmatch.fnmatch(rel, g.rstrip("/")) for g in inc) and not any(fnmatch.fnmatch(rel, g.rstrip("/")) for g in exc)
+    return any(workspace_glob_match(rel, g) for g in inc) and not any(workspace_glob_match(rel, g) for g in exc)
