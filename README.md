@@ -25,7 +25,7 @@ Utility action for debugging that prints various GitHub Actions contexts (github
 Automatically installs the Rust toolchain based on your project's `rust-toolchain.toml` configuration. Extracts the toolchain channel, targets, and components from the config file and applies them using the dtolnay/rust-toolchain action.
 
 ### setup-pnpm
-Installs node (`actions/setup-node`) and pnpm (`pnpm/action-setup`, version from `packageManager` unless given), restores the pnpm store cache under `pnpm-store-<os>-<arch>-<lockfile hash>` (hosted runners only by default) and runs `pnpm install --frozen-lockfile`. Every step is an input with a default: `node-version`/`node-version-file`, `pnpm-version`, `store-path`, `install-args`, `run-install`, `working-directory`.
+Installs node (`actions/setup-node`) and pnpm (`pnpm/action-setup`, version from `packageManager` unless given), restores the pnpm store cache under `pnpm-store-<os>-<arch>-<lockfile hash>` (hosted runners only by default) and runs `pnpm install --frozen-lockfile`. Exports `NODE_OPTIONS` with `--max-old-space-size` at `node-heap-percent` (75) of total RAM unless the caller already set it (`node_heap.py`). Every step is an input with a default: `node-version`/`node-version-file`, `pnpm-version`, `store-path`, `install-args`, `run-install`, `working-directory`.
 
 ### restore-cache / save-cache
 Generic pair over `actions/cache/restore` and `actions/cache/save` using the key `<name>-<os>-<arch>-<hashFiles(key-files)><suffix>`; restore falls back to the newest `<name>-<os>-<arch>-` entry. Both skip self-hosted runners unless told otherwise.

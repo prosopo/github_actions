@@ -70,6 +70,11 @@ inputs:
     required: false
     default: "."
 
+  node-heap-percent:
+    description: "Share of total RAM given to node's --max-old-space-size, exported in NODE_OPTIONS. Skipped when NODE_OPTIONS already sets it (see node_heap.py)."
+    required: false
+    default: "75"
+
 outputs:
   store-cache-hit:
     description: "'true' when the store cache was restored from an exact key match."
@@ -95,6 +100,16 @@ runs:
       run: |
         timeout 600 python3 "$GITHUB_ACTION_PATH/../cache-maintenance/cache_maintenance.py" \
           || echo "::warning::cache maintenance did not finish (exit $?)"
+
+    - name: Size the node heap from runner RAM
+      shell: bash
+      env:
+        HEAP_PERCENT: ${{ inputs.node-heap-percent }}
+      run: |
+        set -euo pipefail
+        py=$(command -v python3 || command -v python)
+        opts=$(timeout 30 "$py" "$GITHUB_ACTION_PATH/node_heap.py" --percent "$HEAP_PERCENT")
+        echo "NODE_OPTIONS=$opts" | tee -a "$GITHUB_ENV"
 
     - name: Resolve pnpm settings
       id: store-key
