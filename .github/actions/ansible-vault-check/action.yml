@@ -1,0 +1,42 @@
+# Fails when an ansible inventory holds a sensitive value in plaintext: every
+# leaf key in <inventory-dir>/<env>/{group,host}_vars must be classified in the
+# classification file, and every `sensitive` one must be an inline !vault block.
+# Needs no vault password, so it is safe on draft and untrusted PRs.
+
+name: "ansible-vault-check"
+description: "Fail when a sensitive ansible inventory value is not vault-encrypted, or a key is unclassified."
+
+inputs:
+  inventory-dir:
+    description: "Directory holding one subdirectory per environment (<env>/group_vars, <env>/host_vars)."
+    required: true
+  classification:
+    description: "YAML file with `sensitive`, `plain` and optional `pending_encryption` key lists."
+    required: true
+  envs:
+    description: "Space-separated environment subdirectories to check. Empty checks every one."
+    required: false
+    default: ""
+  allow-references:
+    description: "'true' lets a sensitive value be a Jinja `{{ }}` or `${}` reference instead of a !vault block."
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check sensitive ansible vars are encrypted
+      shell: bash --noprofile --norc -euo pipefail {0}
+      env:
+        INVENTORY_DIR: ${{ inputs.inventory-dir }}
+        CLASSIFICATION: ${{ inputs.classification }}
+        ENVS: ${{ inputs.envs }}
+        ALLOW_REFERENCES: ${{ inputs.allow-references }}
+      run: |
+        # --user + --break-system-packages: self-hosted VMs use a PEP 668 system
+        # Python, which refuses plain pip installs.
+        python3 -c "import yaml" 2>/dev/null || timeout 120 python3 -m pip install --quiet --user --break-system-packages pyyaml
+        args=(--inventory-dir "$INVENTORY_DIR" --classification "$CLASSIFICATION")
+        for env in $ENVS; do args+=(--env "$env"); done
+        if [ "$ALLOW_REFERENCES" = "true" ]; then args+=(--allow-references); fi
+        timeout 60 python3 "$GITHUB_ACTION_PATH/vault_check.py" "${args[@]}"
