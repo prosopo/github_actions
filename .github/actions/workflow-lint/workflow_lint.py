@@ -19,6 +19,9 @@ cannot come back after each cleanup. Rules (ids usable in waivers):
   allow-dirty      cargo is not run with --allow-dirty
   literal-main     no hardcoded 'main' ref outside the on: block
   secret-to-file   a secret is not redirected into a file or GITHUB_ENV
+  image-pin        (with --images-root) every compose image: and Dockerfile FROM
+                   names an exact tag or digest, never :latest or no tag, so a
+                   deploy or test cannot silently change under us
 
 A finding is waived by a comment on its line or the line above:
   # workflow-lint: allow <rule> -- <reason>
@@ -39,6 +42,9 @@ LITERAL_MAIN_RE = re.compile(r"refs/heads/main\b|origin/main\b|['\"]main['\"]")
 SECRET_TO_FILE_RE = re.compile(r"secrets\.[A-Za-z0-9_]+.*(?:>|GITHUB_ENV)")
 ALLOW_DIRTY_RE = re.compile(r"\bcargo\b.*--allow-dirty")
 UNWAIVABLE = {"no-pr-target"}
+COMPOSE_IMAGE_RE = re.compile(r"^\s*image:\s*['\"]?([^'\"\s#]+)")
+FROM_RE = re.compile(r"^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?", re.IGNORECASE)
+SKIP_DIRS = {".git", "node_modules"}
 
 
 @dataclass(frozen=True)
@@ -176,12 +182,56 @@ def problems(path: Path) -> list[Finding]:
     return bad + [f for f in found if f.rule in UNWAIVABLE or f.rule not in waived.get(f.line, set())]
 
 
+def _unpinned(ref: str) -> bool:
+    if "@" in ref:
+        return False
+    name = ref.rsplit("/", 1)[-1]
+    return ":" not in name or name.endswith(":latest")
+
+
+def image_problems(path: Path) -> list[Finding]:
+    lines = path.read_text().splitlines()
+    waived, bad = _waivers(path, lines)
+    found = []
+    stages: set[str] = set()
+    for i, line in enumerate(lines):
+        if path.name.startswith("Dockerfile"):
+            m = FROM_RE.match(line)
+            ref = m.group(1) if m else None
+            # Earlier build stages, scratch and build-arg images are not pulls.
+            builtin = ref is not None and (ref.lower() in stages or ref == "scratch" or "$" in ref)
+            if m and m.group(2):
+                stages.add(m.group(2).lower())
+            if builtin:
+                continue
+        else:
+            m = COMPOSE_IMAGE_RE.match(line)
+            ref = m.group(1) if m else None
+            if ref and "$" in ref:
+                continue
+        if ref and _unpinned(ref):
+            found.append(Finding(path, i + 1, "image-pin", f"{ref} has no exact tag; pin a version or digest"))
+    return bad + [f for f in found if f.rule not in waived.get(f.line, set())]
+
+
+def image_files(root: Path) -> list[Path]:
+    return sorted(
+        p for p in root.rglob("*")
+        if p.is_file()
+        and not SKIP_DIRS.intersection(p.relative_to(root).parts)
+        and (p.name.startswith("Dockerfile") or ("compose" in p.name and p.suffix in {".yml", ".yaml"}))
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--dir", default=".github/workflows")
+    p.add_argument("--images-root", default="", help="Also check compose files and Dockerfiles under this directory.")
     a = p.parse_args(argv)
     files = sorted(Path(a.dir).glob("*.yml")) + sorted(Path(a.dir).glob("*.yaml"))
     found = [f for path in files for f in problems(path)]
+    if a.images_root:
+        found += [f for path in image_files(Path(a.images_root)) for f in image_problems(path)]
     for f in found:
         print(f"::error file={f.path},line={f.line}::[{f.rule}] {f.message}")
     print(f"checked {len(files)} workflow files, {len(found)} findings")
