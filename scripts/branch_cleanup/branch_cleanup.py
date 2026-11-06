@@ -25,6 +25,7 @@ import fnmatch
 import json
 import os
 import subprocess
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -39,18 +40,21 @@ def log(event: str, **fields: object) -> None:
 
 
 RETRY_DELAYS = (2, 5, 15, 30, 60)
+# Retried: server errors, rate limits, network. Anything else (404, 422, bad path) fails at once.
+TRANSIENT_RE = re.compile(r"HTTP (5\d\d|429)|rate limit|timed? ?out|connection|EOF|TLS", re.IGNORECASE)
 
 
 def gh(args: list[str], run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
        sleep: Callable[[float], None] = time.sleep) -> str:
-    """gh with retries: a sweep makes hundreds of calls and one 5xx or secondary rate limit
-    (seen on prosopo/captcha's first dry run) must not abort it."""
+    """gh with retries on transient errors: a sweep makes hundreds of calls and one 5xx or
+    secondary rate limit must not abort it."""
     for attempt, delay in enumerate((*RETRY_DELAYS, None)):
         try:
             return run(["gh", *args], check=True, capture_output=True, text=True, timeout=120).stdout
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            log("gh-error", args=args, attempt=attempt + 1, stderr=(getattr(e, "stderr", "") or "").strip()[-500:])
-            if delay is None:
+            stderr = (getattr(e, "stderr", "") or "").strip()[-500:]
+            log("gh-error", args=args, attempt=attempt + 1, stderr=stderr)
+            if delay is None or not (isinstance(e, subprocess.TimeoutExpired) or TRANSIENT_RE.search(stderr)):
                 raise
             sleep(delay)
     raise AssertionError("unreachable")
@@ -120,7 +124,9 @@ class Cleaner:
         if branch.name in open_bases:
             return None, "base-of-open-pr"
         ref = quote(branch.name, safe="")
-        own = [p for p in self._pulls(f"state=closed&head={self.owner}:{ref}")
+        # %3A, not ':': gh api expands `:owner`/`:repo` in paths, so a branch named
+        # repo-diagram turned `prosopo:repo-diagram` into a placeholder and failed.
+        own = [p for p in self._pulls(f"state=closed&head={self.owner}%3A{ref}")
                if p["head"]["ref"] == branch.name and self._is_own(p)]
         merged = [p for p in own if p.get("merged_at")]
         if not merged:

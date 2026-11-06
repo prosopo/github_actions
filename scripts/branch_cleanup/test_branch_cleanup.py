@@ -123,7 +123,17 @@ class CandidateTests(unittest.TestCase):
             calls.append(args)
             return fake(args)
         self.assertEqual([c.branch for c in bc.Cleaner(REPO, spy).candidates()], ["a/b"])
-        self.assertTrue(any("head=prosopo:a%2Fb" in a[1] for a in calls))
+        self.assertTrue(any("head=prosopo%3Aa%2Fb" in a[1] for a in calls))
+
+    def test_no_colon_reaches_gh_placeholder_expansion(self):
+        calls = []
+        fake = FakeGitHub([branch("main", "m"), branch("repo-diagram", "a1")], [pr(1, "repo-diagram", "a1")])
+
+        def spy(args):
+            calls.append(args)
+            return fake(args)
+        self.assertEqual([c.branch for c in bc.Cleaner(REPO, spy).candidates()], ["repo-diagram"])
+        self.assertFalse(any(":" in a[1] for a in calls if a[0] == "api" and len(a) > 1))
 
 
 class RunTests(unittest.TestCase):
@@ -175,11 +185,21 @@ class GhRetryTests(unittest.TestCase):
         sleeps = []
 
         def run(cmd, **kw):
-            raise bc.subprocess.CalledProcessError(1, cmd, stderr="HTTP 404")
+            raise bc.subprocess.CalledProcessError(1, cmd, stderr="HTTP 503")
         with unittest.mock.patch("sys.stdout", open(os.devnull, "w")):
             with self.assertRaises(bc.subprocess.CalledProcessError):
                 bc.gh(["api", "x"], run=run, sleep=sleeps.append)
         self.assertEqual(sleeps, list(bc.RETRY_DELAYS))
+
+    def test_terminal_error_is_not_retried(self):
+        sleeps = []
+
+        def run(cmd, **kw):
+            raise bc.subprocess.CalledProcessError(1, cmd, stderr="unable to expand placeholder in path")
+        with unittest.mock.patch("sys.stdout", open(os.devnull, "w")):
+            with self.assertRaises(bc.subprocess.CalledProcessError):
+                bc.gh(["api", "x"], run=run, sleep=sleeps.append)
+        self.assertEqual(sleeps, [])
 
 
 class CliTests(unittest.TestCase):
