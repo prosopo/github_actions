@@ -40,6 +40,10 @@ def gh(args: list[str]) -> str:
     return subprocess.run(["gh", *args], check=True, capture_output=True, text=True, timeout=120).stdout
 
 
+def default_branch(repo: str) -> str:
+    return gh(["api", f"repos/{repo}", "--jq", ".default_branch"]).strip()
+
+
 @dataclass
 class PR:
     number: int
@@ -175,12 +179,13 @@ class Updater:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--repo", required=True)
-    p.add_argument("--base", default="main")
+    p.add_argument("--base", default="", help="target branch; empty means the repo's default branch")
     p.add_argument("--label", default="auto-update")
     p.add_argument("--event", default="schedule")
     p.add_argument("--max-age-minutes", type=float, default=90)
     a = p.parse_args(argv)
-    Updater(a.repo, a.base, a.label, max_age=a.max_age_minutes).step(a.event, datetime.now(timezone.utc))
+    base = a.base or default_branch(a.repo)
+    Updater(a.repo, base, a.label, max_age=a.max_age_minutes).step(a.event, datetime.now(timezone.utc))
     return 0
 
 

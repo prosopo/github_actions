@@ -28,8 +28,9 @@ on:
         type: string
         required: true
       base:
+        description: "Branch the PRs target; empty means the repo's default branch."
         type: string
-        default: main
+        default: ""
       label:
         type: string
         default: auto-update
