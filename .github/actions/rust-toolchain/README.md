@@ -16,6 +16,8 @@ This action reads the `rust-toolchain.toml` file from your project root and auto
 - **targets**: Cross-compilation targets (e.g., `wasm32-unknown-unknown`)
 - **components**: Additional components (e.g., `rustfmt`, `clippy`)
 
+`targets` and `components` are optional; a file without them installs just the channel. The file is parsed as TOML (`read_toolchain.py`), so multi-line lists work too.
+
 It then passes these values to the [dtolnay/rust-toolchain](https://github.com/dtolnay/rust-toolchain) action to install the configured toolchain.
 
 ## Configuration

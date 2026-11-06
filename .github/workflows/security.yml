@@ -87,12 +87,17 @@ jobs:
         env:
           BASELINE: ${{ github.event.pull_request.base.sha }}
           EXCLUDE: ${{ inputs.semgrep-exclude }}
+        # POSIX sh, not bash: the semgrep image's default shell is sh, and
+        # GitHub runs container steps with it. Arguments build up in "$@".
         run: |
-          args=(--config=p/default --config=p/typescript --config=p/nodejs --config=p/secrets
-                --skip-unknown-extensions --metrics=off --error
-                --exclude=node_modules --exclude=dist --exclude='**/*.min.js')
+          set -eu
+          set -- --config=p/default --config=p/typescript --config=p/nodejs --config=p/secrets \
+            --skip-unknown-extensions --metrics=off --error \
+            --exclude=node_modules --exclude=dist --exclude='**/*.min.js'
           while IFS= read -r path; do
-            [ -n "$path" ] && args+=(--exclude="$path")
-          done <<< "$EXCLUDE"
-          if [ -n "$BASELINE" ]; then args+=(--baseline-commit "$BASELINE"); fi
-          timeout 24m semgrep scan "${args[@]}"
+            if [ -n "$path" ]; then set -- "$@" --exclude="$path"; fi
+          done <<EOF
+          $EXCLUDE
+          EOF
+          if [ -n "$BASELINE" ]; then set -- "$@" --baseline-commit "$BASELINE"; fi
+          timeout 24m semgrep scan "$@"
