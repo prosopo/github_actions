@@ -41,6 +41,10 @@ on:
       node-version:
         type: string
         default: ""
+      node-version-file:
+        description: "File the Node version is read from (e.g. .nvmrc) when node-version is empty."
+        type: string
+        default: ""
       env:
         description: "KEY=VALUE lines exported before building."
         type: string
@@ -144,6 +148,7 @@ jobs:
         timeout-minutes: 25
         with:
           node-version: ${{ inputs.node-version }}
+          node-version-file: ${{ inputs.node-version-file }}
 
       - name: Setup command
         if: ${{ inputs.setup-command != '' }}

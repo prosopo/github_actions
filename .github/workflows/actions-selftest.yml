@@ -127,6 +127,7 @@ jobs:
       - uses: ./.github/actions/setup-pnpm
         timeout-minutes: 10
         with:
+          # workflow-lint: allow node-version -- exercises the action's node-version input
           node-version: "24.22.1"
           lockfile: tests/fixtures/pnpm/pnpm-lock.yaml
           working-directory: tests/fixtures/pnpm

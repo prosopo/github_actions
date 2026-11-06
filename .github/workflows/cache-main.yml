@@ -37,7 +37,11 @@ on:
         type: string
         default: "false"
       node-version:
-        description: "Node version; empty uses packageManager/.nvmrc via setup-pnpm."
+        description: "Node version; takes precedence over node-version-file."
+        type: string
+        default: ""
+      node-version-file:
+        description: "File the Node version is read from (e.g. .nvmrc) when node-version is empty."
         type: string
         default: ""
       env:
@@ -125,6 +129,7 @@ jobs:
         timeout-minutes: 20
         with:
           node-version: ${{ inputs.node-version }}
+          node-version-file: ${{ inputs.node-version-file }}
           run-install: "false"
 
       - id: playwright
