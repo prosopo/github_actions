@@ -1,6 +1,6 @@
 # End-to-end tests for any repo. Restores build.yml's turbo cache, starts only
 # the services the repo defines in its own compose file (none if it has none),
-# then runs the repo's test:e2e turbo task. Called with workflow_call after build.
+# runs the caller's setup-command if any, then the repo's test:e2e turbo task. Called with workflow_call after build.
 
 name: e2e
 
@@ -15,6 +15,10 @@ on:
       timeout-minutes: {description: "e2e job limit.", type: number, default: 60}
       artifact-name: {description: "Turbo cache artifact from build.yml.", type: string, default: "turbo-cache"}
       compose-file: {description: "Repo compose file defining the services e2e needs; skipped when absent.", type: string, default: "docker/docker-compose.test.yml"}
+      setup-command:
+        description: "Run after services are up and before test:e2e, e.g. to start the repo's own dev servers in the background; empty skips it."
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -55,6 +59,12 @@ jobs:
           else
             echo "no $COMPOSE_FILE; starting no services"
           fi
+      - name: Setup command
+        if: ${{ inputs.setup-command != '' }}
+        timeout-minutes: 15
+        env:
+          CMD: ${{ inputs.setup-command }}
+        run: timeout 14m bash -c "$CMD"
       - name: turbo test:e2e
         timeout-minutes: ${{ inputs.timeout-minutes }}
         env:
