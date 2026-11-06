@@ -16,7 +16,10 @@ def toml(text: str) -> Path:
 
 class TestRead(unittest.TestCase):
     def test_full(self) -> None:
-        path = toml('[toolchain]\nchannel = "1.98.1"\ntargets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-musl"]\ncomponents = ["rustfmt", "clippy"]\n')
+        path = toml(
+            '[toolchain]\nchannel = "1.98.1"\n'
+            'targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-musl"]\ncomponents = ["rustfmt", "clippy"]\n'
+        )
         self.assertEqual(
             read_toolchain.read(path),
             {"toolchain": "1.98.1", "targets": "wasm32-unknown-unknown,x86_64-unknown-linux-musl", "components": "rustfmt,clippy"},

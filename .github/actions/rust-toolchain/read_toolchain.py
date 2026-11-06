@@ -7,8 +7,9 @@ valid and common, and must yield an empty list rather than fail the step.
 import argparse
 import json
 import sys
-import tomllib
 from pathlib import Path
+
+import tomllib
 
 
 def read(path: Path) -> dict[str, str]:
