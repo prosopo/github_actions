@@ -64,6 +64,26 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
   - `e2e.yml`: restores that cache, starts only the services in the repo's own compose file (none if absent), runs `test:e2e`.
   - `security.yml`: `pnpm audit` or `npm audit` by the root lockfile, `cargo audit` (Rust repos), gitleaks.
   - `pr-housekeeping.yml`: requires a `.changeset/*.md` when `packages/` changed (repos with changesets), rejects WIP titles.
+- `pick-runner.yml`: decides hosted vs self-hosted for the caller's jobs (`.github/scripts/pick_runner.py`) and writes the choice and its reason to the run summary. First match wins: fork PR → hosted, always; `runner` input (`auto|hosted|self-hosted`, default `auto`); a `runner: hosted|self-hosted` line in the PR description (read via the API at run time, so an edit applies on the next push or re-run); the caller's entry in repo var `GH_RUNNER_MAP` (JSON keyed by workflow file name without `.yml`, e.g. `{"tests":"self-hosted","e2e":"hosted"}`); else hosted (`ubuntu-latest`). Invalid map JSON or an unknown value means hosted plus a warning. Self-hosted labels come from `vars.GH_RUNNER` (JSON list, default `["self-hosted","linux","x64","ubuntu-24.04"]`), with per-job size labels from `sizes` appended on self-hosted only. Callers expose `runner` as a choice input on `workflow_dispatch`/`workflow_call` and pass it through:
+
+  ```yaml
+  jobs:
+    runner:
+      uses: prosopo/github_actions/.github/workflows/pick-runner.yml@<sha>
+      permissions: { contents: read, pull-requests: read }
+      with:
+        actions-ref: <sha>
+        runner: ${{ inputs.runner || 'auto' }}
+        sizes: '{"build":["xlarge"]}'
+    build:
+      needs: runner
+      runs-on: ${{ fromJSON(needs.runner.outputs.labels).build }}
+    lint:
+      needs: runner
+      runs-on: ${{ fromJSON(needs.runner.outputs.default) }}
+  ```
+
+  Two calls in one run need distinct `workflow` or `concurrency-key` inputs, or they queue behind each other. `ci.yml`'s `selftest-pick-runner` jobs call it as above and check the output shape.
 - `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
 
 ## This repo's own CI
