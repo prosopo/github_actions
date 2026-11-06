@@ -1,6 +1,6 @@
 # Fails the job when a workflow breaks a mechanically checkable house rule
 # (concurrency, default shell, PR trigger types, permissions, cargo
-# --allow-dirty, hardcoded main, secrets on disk). Rules and the waiver syntax
+# --allow-dirty, hardcoded main, secrets on disk, unpinned images). Rules and the waiver syntax
 # are listed in workflow_lint.py's docstring.
 
 name: "workflow-lint"
@@ -11,6 +11,10 @@ inputs:
     description: "Directory of workflow files to check."
     required: false
     default: ".github/workflows"
+  images-root:
+    description: "Also check compose files and Dockerfiles under this directory for unpinned images; empty skips it."
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -19,8 +23,9 @@ runs:
       shell: bash
       env:
         DIR: ${{ inputs.dir }}
+        IMAGES_ROOT: ${{ inputs.images-root }}
       run: |
         # --user + --break-system-packages: self-hosted VMs use a PEP 668 system
         # Python, which refuses plain pip installs.
         python3 -c "import yaml" 2>/dev/null || timeout 120 python3 -m pip install --quiet --user --break-system-packages pyyaml
-        timeout 60 python3 "$GITHUB_ACTION_PATH/workflow_lint.py" --dir "$DIR"
+        timeout 60 python3 "$GITHUB_ACTION_PATH/workflow_lint.py" --dir "$DIR" --images-root "$IMAGES_ROOT"

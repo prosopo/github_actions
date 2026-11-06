@@ -196,6 +196,67 @@ class TestWaiver(unittest.TestCase):
         self.assertEqual(rules(text), ["allow-dirty"])
 
 
+def image_lint(name: str, text: str) -> list[str]:
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / name
+        path.write_text(textwrap.dedent(text))
+        return [f.message.split(" ", 1)[0] for f in workflow_lint.image_problems(path)]
+
+
+class TestDockerImagePins(unittest.TestCase):
+    def test_compose_latest_and_untagged_fail(self) -> None:
+        text = """\
+            services:
+              a:
+                image: caddy:latest
+              b:
+                image: "ghcr.io/org/app"
+              c:
+                image: headscale/headscale:v0.28.0
+              d:
+                image: redis@sha256:abc
+              e:
+                image: ${IMAGE}
+              f:
+                image: localhost:5000/app:1.2
+            """
+        self.assertEqual(image_lint("docker-compose.yml", text), ["caddy:latest", "ghcr.io/org/app"])
+
+    def test_dockerfile_untagged_from_fails(self) -> None:
+        text = """\
+            FROM node AS build
+            FROM --platform=linux/amd64 nginx:1.27.3
+            FROM build AS final
+            FROM scratch
+            FROM ${BASE}
+            FROM alpine:latest
+            """
+        self.assertEqual(image_lint("Dockerfile", text), ["node", "alpine:latest"])
+
+    def test_docker_waiver_with_reason(self) -> None:
+        text = "services:\n  a:\n    # workflow-lint: allow image-pin -- local dev only\n    image: app\n"
+        self.assertEqual(image_lint("compose.yaml", text), [])
+
+    def test_docker_files_found_outside_node_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            for rel in ("docker/Dockerfile.dev", "x/docker-compose.test.yml", "node_modules/p/Dockerfile", "x/other.yml"):
+                Path(d, rel).parent.mkdir(parents=True, exist_ok=True)
+                Path(d, rel).write_text("")
+            found = [p.relative_to(d).as_posix() for p in workflow_lint.image_files(Path(d))]
+            self.assertEqual(found, ["docker/Dockerfile.dev", "x/docker-compose.test.yml"])
+
+    def test_docker_main_fails_on_images_root(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            wf = Path(d, "wf")
+            wf.mkdir()
+            Path(wf, "ok.yml").write_text(COMPLIANT)
+            Path(d, "Dockerfile").write_text("FROM node:22.12.0\n")
+            self.assertEqual(workflow_lint.main(["--dir", str(wf), "--images-root", d]), 0)
+            Path(d, "Dockerfile").write_text("FROM node\n")
+            self.assertEqual(workflow_lint.main(["--dir", str(wf), "--images-root", d]), 1)
+            self.assertEqual(workflow_lint.main(["--dir", str(wf)]), 0)
+
+
 class TestMain(unittest.TestCase):
     def test_exit_codes(self) -> None:
         with tempfile.TemporaryDirectory() as d:
