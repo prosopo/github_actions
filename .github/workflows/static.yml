@@ -26,6 +26,10 @@ on:
         description: "Directory the repo's workspace lives in (the self-test points this at a fixture)."
         type: string
         default: "."
+      exclude-paths:
+        description: "Whitespace-separated directories (relative to working-directory) language detection ignores."
+        type: string
+        default: ""
       js-command:
         description: "Command for the js job."
         type: string
@@ -83,6 +87,7 @@ jobs:
         timeout-minutes: 3
         with:
           dir: ${{ inputs.working-directory }}
+          exclude: ${{ inputs.exclude-paths }}
           base: ${{ github.event.pull_request.base.sha || github.event.before }}
 
   js:

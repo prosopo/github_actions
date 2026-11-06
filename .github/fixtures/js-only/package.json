@@ -2,7 +2,7 @@
 	"name": "stage-workflows-fixture-js-only",
 	"private": true,
 	"packageManager": "pnpm@11.27.1",
-	"description": "A JS-only repo for stage-workflows-selftest.yml: static.yml and test.yml must run their js job here and skip rust and python.",
+	"description": "A JS-only repo for the selftest-static and selftest-test jobs in ci.yml: static.yml and test.yml must run their js job here and skip rust and python.",
 	"scripts": {
 		"lint": "node -e \"console.log('fixture lint ok')\"",
 		"test": "node -e \"console.log('fixture test ok')\""

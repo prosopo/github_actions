@@ -53,6 +53,12 @@ def detect(tracked: list[str], changed: list[str] | None) -> dict[str, bool]:
     return out
 
 
+def without(paths: list[str], excluded: list[str]) -> list[str]:
+    """Drop paths under any excluded directory prefix."""
+    prefixes = [e.rstrip("/") + "/" for e in excluded if e]
+    return [p for p in paths if not any(p.startswith(pre) for pre in prefixes)]
+
+
 def _git(*args: str) -> list[str]:
     out = subprocess.run(["git", *args], capture_output=True, text=True, timeout=60, check=True)
     return [line for line in out.stdout.splitlines() if line]
@@ -61,15 +67,16 @@ def _git(*args: str) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="", help="commit to diff against; empty or all-zero = unknown")
+    parser.add_argument("--exclude", action="append", default=[], help="directory to ignore (repeatable)")
     args = parser.parse_args(argv)
 
     changed = None
     if args.base and set(args.base) != {"0"}:
         try:
-            changed = _git("diff", "--name-only", f"{args.base}...HEAD")
+            changed = without(_git("diff", "--name-only", f"{args.base}...HEAD"), args.exclude)
         except subprocess.CalledProcessError:
             changed = None
-    tracked = _git("ls-files")
+    tracked = without(_git("ls-files"), args.exclude)
     result: dict[str, bool | str] = {**detect(tracked, changed), "package-manager": package_manager(tracked)}
     print(json.dumps({"event": "detect-languages", **result}))
     output = os.environ.get("GITHUB_OUTPUT")
