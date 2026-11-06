@@ -198,7 +198,9 @@ def run(env: dict[str, str], args: argparse.Namespace, fetch: Fetch = fetch_pr_b
         workflow=workflow,
     )
     decision.warnings[:0] = warnings
-    base = base_self_hosted(env.get("GH_RUNNER", ""), decision.warnings)
+    # The prosopo org sets GH_RUNNER to "ubuntu-24.04" and repos override it,
+    # so only parse it when it is actually used.
+    base = base_self_hosted(env.get("GH_RUNNER", ""), decision.warnings) if decision.kind == SELF_HOSTED else []
     sizes = parse_sizes(args.sizes, decision.warnings)
     default, jobs = labels_for(decision.kind, base, sizes)
     log("pick_runner.decision", workflow=workflow, kind=decision.kind, reason=decision.reason,

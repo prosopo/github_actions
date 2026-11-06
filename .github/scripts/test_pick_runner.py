@@ -173,6 +173,13 @@ class Run(unittest.TestCase):
         self.assertEqual(json.loads(out["default"]), ["self-hosted", "vm"])
         self.assertIn("Workflow key: `deploy`", out["summary"])
 
+    def test_hosted_ignores_unparseable_gh_runner(self) -> None:
+        out = pr.run(self.env({}, GH_RUNNER='"ubuntu-24.04"'), self.args("hosted"))
+        self.assertNotIn("Warning", out["summary"])
+        out = pr.run(self.env({}, GH_RUNNER='"ubuntu-24.04"'), self.args("self-hosted"))
+        self.assertEqual(json.loads(out["default"]), SELF)
+        self.assertIn("Warning: GH_RUNNER", out["summary"])
+
     def test_main_writes_output_and_summary(self) -> None:
         out_path = os.path.join(self.dir.name, "out")
         sum_path = os.path.join(self.dir.name, "sum")
