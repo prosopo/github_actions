@@ -166,5 +166,71 @@
   "unit": "tests",
   "category": "test",
   "reason": "is itself the e2e suite (e2e column)"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/angular/angular-procaptcha-integration-demo",
+  "category": "typecheck",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/angular/angular-procaptcha-integration-demo",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/angular/angular-procaptcha-wrapper",
+  "category": "typecheck",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/angular/angular-procaptcha-wrapper",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/svelte/svelte-procaptcha-wrapper",
+  "category": "typecheck",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/svelte/svelte-procaptcha-wrapper",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/svelte/svelte-procaptcha-integration-demo",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/react/react-procaptcha-integration-demo",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/react/react-procaptcha-wrapper",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/vue/vue-procaptcha-integration-demo",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
+ },
+ {
+  "repo": "captcha",
+  "unit": "integration/frameworks/vue/vue-procaptcha-wrapper",
+  "category": "test",
+  "reason": "framework wrapper/demo awaiting a revive-or-delete decision; no CI until then"
  }
 ]
