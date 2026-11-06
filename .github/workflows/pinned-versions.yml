@@ -1,0 +1,60 @@
+# Fails when any npm, cargo or python dependency is not pinned to one exact
+# version, or a lockfile entry lacks an integrity hash. The rules are in
+# .github/scripts/pinned_versions.py.
+#
+# Callers: pull_request (drafts too: it takes seconds) and push to main.
+
+name: pinned-versions
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions holding the script; pass the SHA this workflow is pinned at."
+        type: string
+        required: true
+      concurrency-key:
+        description: "Concurrency group prefix; defaults to pinned-versions."
+        type: string
+        default: ""
+      exclude:
+        description: "Repo-relative globs to skip, one per line (vendored or generated manifests)."
+        type: string
+        default: ""
+      runs-on: {description: "Runner label.", type: string, default: "ubuntu-latest"}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ inputs.concurrency-key || 'pinned-versions' }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 3
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - name: Check pinned versions
+        timeout-minutes: 2
+        env:
+          EXCLUDE: ${{ inputs.exclude }}
+        run: |
+          args=(--root . --exclude .shared-actions)
+          while IFS= read -r glob; do
+            if [ -n "$glob" ]; then args+=(--exclude "$glob"); fi
+          done <<< "$EXCLUDE"
+          timeout 90 python3 .shared-actions/.github/scripts/pinned_versions.py "${args[@]}"
