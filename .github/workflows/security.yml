@@ -1,5 +1,6 @@
 # Dependency, secret and code scanning for any repo: pnpm or npm audit by the
-# root lockfile, cargo audit when it has Rust, gitleaks and semgrep always.
+# root lockfile, cargo audit when it has Rust, gitleaks and semgrep always, and
+# on PRs a review of the dependencies the PR adds.
 # Called with workflow_call. On a PR both scanners gate only what the PR adds
 # (gitleaks its commits, semgrep findings new since the base), so existing
 # backlog never blocks unrelated work; other events scan the whole tree and
@@ -15,6 +16,10 @@ on:
         type: string
         required: true
       runs-on: {description: "Runner label.", type: string, default: "ubuntu-latest"}
+      dependency-review-severity:
+        description: "Lowest severity (low, moderate, high, critical) of a newly added vulnerable dependency that fails the PR."
+        type: string
+        default: "high"
       semgrep-exclude:
         description: "Extra paths semgrep skips, one per line (node_modules, dist and *.min.js always are)."
         type: string
@@ -101,3 +106,56 @@ jobs:
           EOF
           if [ -n "$BASELINE" ]; then set -- "$@" --baseline-commit "$BASELINE"; fi
           timeout 24m semgrep scan "$@"
+
+  # Fails a PR that adds a dependency with a vulnerability at or above
+  # dependency-review-severity, or a license outside
+  # .github/dependency-review/allowed-licenses.txt. Runs on drafts too: it is
+  # cheap, and the earlier a bad dependency is flagged the less is built on it.
+  # Public repos use GitHub's dependency-graph compare API; on private repos
+  # that API returns 403 without GitHub Code Security, so they scan base and
+  # head lockfiles with osv-scanner and diff (scripts/dependency_diff.py).
+  dependency-review:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+      - id: allow
+        name: Read the license allowlist
+        timeout-minutes: 1
+        run: echo "licenses=$(grep -v '^#' .shared-actions/.github/dependency-review/allowed-licenses.txt | paste -sd, -)" >> "$GITHUB_OUTPUT"
+      - name: Review added dependencies (dependency graph)
+        if: ${{ !github.event.repository.private }}
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
+        timeout-minutes: 5
+        with:
+          fail-on-severity: ${{ inputs.dependency-review-severity }}
+          allow-licenses: ${{ steps.allow.outputs.licenses }}
+          comment-summary-in-pr: never
+      - name: Review added dependencies (osv-scanner)
+        if: ${{ github.event.repository.private }}
+        timeout-minutes: 10
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          LICENSES: ${{ steps.allow.outputs.licenses }}
+          SEVERITY: ${{ inputs.dependency-review-severity }}
+          OSV: ${{ runner.temp }}/osv-scanner
+        run: |
+          timeout 2m curl -fsSL -o "$OSV" https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
+          chmod +x "$OSV"
+          git worktree add -q "$RUNNER_TEMP/base" "$BASE"
+          # Exit 1 means findings, which the diff judges; >1 is a scanner error.
+          scan() { timeout 4m "$OSV" scan source -r --allow-no-lockfiles --licenses="$LICENSES" --format json "$1" > "$2" || [ $? -eq 1 ]; }
+          scan "$RUNNER_TEMP/base" "$RUNNER_TEMP/base.json"
+          scan . "$RUNNER_TEMP/head.json"
+          python3 .shared-actions/.github/scripts/dependency_diff.py --base "$RUNNER_TEMP/base.json" --head "$RUNNER_TEMP/head.json" \
+            --severity "$SEVERITY" --summary-file "$GITHUB_STEP_SUMMARY"
