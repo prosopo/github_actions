@@ -26,6 +26,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from typing import Callable
 from urllib.parse import quote
@@ -37,8 +38,22 @@ def log(event: str, **fields: object) -> None:
     print(json.dumps({"event": event, **fields}, default=str), flush=True)
 
 
-def gh(args: list[str]) -> str:
-    return subprocess.run(["gh", *args], check=True, capture_output=True, text=True, timeout=120).stdout
+RETRY_DELAYS = (2, 5, 15, 30, 60)
+
+
+def gh(args: list[str], run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+       sleep: Callable[[float], None] = time.sleep) -> str:
+    """gh with retries: a sweep makes hundreds of calls and one 5xx or secondary rate limit
+    (seen on prosopo/captcha's first dry run) must not abort it."""
+    for attempt, delay in enumerate((*RETRY_DELAYS, None)):
+        try:
+            return run(["gh", *args], check=True, capture_output=True, text=True, timeout=120).stdout
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            log("gh-error", args=args, attempt=attempt + 1, stderr=(getattr(e, "stderr", "") or "").strip()[-500:])
+            if delay is None:
+                raise
+            sleep(delay)
+    raise AssertionError("unreachable")
 
 
 @dataclass(frozen=True)

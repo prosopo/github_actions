@@ -158,6 +158,30 @@ class RunTests(unittest.TestCase):
         self.assertIn("kept (tip moved)", text)
 
 
+class GhRetryTests(unittest.TestCase):
+    def test_retries_then_succeeds(self):
+        calls, sleeps = [], []
+
+        def run(cmd, **kw):
+            calls.append(cmd)
+            if len(calls) < 3:
+                raise bc.subprocess.CalledProcessError(1, cmd, stderr="HTTP 502")
+            return bc.subprocess.CompletedProcess(cmd, 0, stdout="ok")
+        with unittest.mock.patch("sys.stdout", open(os.devnull, "w")):
+            self.assertEqual(bc.gh(["api", "x"], run=run, sleep=sleeps.append), "ok")
+        self.assertEqual(sleeps, [2, 5])
+
+    def test_gives_up_after_all_retries(self):
+        sleeps = []
+
+        def run(cmd, **kw):
+            raise bc.subprocess.CalledProcessError(1, cmd, stderr="HTTP 404")
+        with unittest.mock.patch("sys.stdout", open(os.devnull, "w")):
+            with self.assertRaises(bc.subprocess.CalledProcessError):
+                bc.gh(["api", "x"], run=run, sleep=sleeps.append)
+        self.assertEqual(sleeps, list(bc.RETRY_DELAYS))
+
+
 class CliTests(unittest.TestCase):
     def test_parse_bool(self):
         self.assertTrue(bc.parse_bool("True"))
