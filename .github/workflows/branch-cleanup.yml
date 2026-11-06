@@ -1,0 +1,87 @@
+# Housekeeping: deletes remote branches whose merged PR head is still the
+# branch tip, i.e. merged and untouched since. Squash merges hide these from
+# `git branch --merged`; the rules are in scripts/branch_cleanup/branch_cleanup.py.
+# Repos also set delete_branch_on_merge, so this only sweeps leftovers (branches
+# merged before that setting, or restored after merge).
+#
+# Callers: a thin .github/workflows/branch-cleanup.yml on a weekly schedule plus
+# workflow_dispatch, job permissions `contents: write` and `pull-requests: read`.
+# dry-run defaults to true: the candidate table lands in the job summary and
+# nothing is deleted. Each deletion logs branch, sha and PR link for restore.
+#
+# Follow the existing layout and conventions; a new workflow or structural
+# change needs a justification in the PR and review by the .github/ code owners.
+
+name: branch-cleanup
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions holding the script; pass the SHA the caller pins this workflow at."
+        type: string
+        required: true
+      dry-run:
+        description: "true only lists candidates in the job summary; false deletes them."
+        type: boolean
+        default: true
+      keep:
+        description: "Comma-separated fnmatch patterns never deleted, on top of the default and protected branches."
+        type: string
+        default: "release/*"
+      concurrency-key:
+        description: "Concurrency group; empty means one cleanup per repo at a time."
+        type: string
+        default: ""
+      runs-on: {description: "Runner label.", type: string, default: "ubuntu-latest"}
+
+concurrency:
+  group: ${{ inputs.concurrency-key || format('branch-cleanup-{0}', github.repository) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  cleanup:
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+
+      - name: Act as
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          echo "repo=$REPO dry-run=$DRY_RUN actor=$GITHUB_ACTOR event=$GITHUB_EVENT_NAME"
+          timeout 30 gh api "repos/$REPO" --jq '"default=\(.default_branch) delete_branch_on_merge=\(.delete_branch_on_merge)"'
+
+      - name: Clean up merged branches
+        timeout-minutes: 25
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # Under act nothing is deleted, whatever the input says.
+          DRY_RUN: ${{ inputs.dry-run || env.ACT == 'true' }}
+          KEEP: ${{ inputs.keep }}
+        run: |
+          timeout 1440 python3 .shared-actions/scripts/branch_cleanup/branch_cleanup.py \
+            --repo "$REPO" --dry-run "$DRY_RUN" --keep "$KEEP"

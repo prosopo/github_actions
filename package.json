@@ -12,8 +12,8 @@
 		"lint:shell": "python3 .github/scripts/lint_composite_shell.py",
 		"lint:actions": "python3 .github/scripts/validate_actions.py",
 		"lint:timeouts": "python3 .github/actions/check-timeouts/check_timeouts.py --dir .github/workflows --actions-dir .github/actions",
-		"lint:py": "python3 -m compileall -q .github",
+		"lint:py": "python3 -m compileall -q .github scripts",
 		"test": "pnpm run test:py",
-		"test:py": "python3 .github/scripts/run_python_tests.py --root .github"
+		"test:py": "python3 .github/scripts/run_python_tests.py --root .github && python3 .github/scripts/run_python_tests.py --root scripts"
 	}
 }

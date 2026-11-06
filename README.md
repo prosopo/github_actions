@@ -64,6 +64,7 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
   - `e2e.yml`: restores that cache, starts only the services in the repo's own compose file (none if absent), runs `test:e2e`.
   - `security.yml`: `pnpm audit` or `npm audit` by the root lockfile, `cargo audit` (Rust repos), gitleaks.
   - `pr-housekeeping.yml`: requires a `.changeset/*.md` when `packages/` changed (repos with changesets), rejects WIP titles.
+- `branch-cleanup.yml`: deletes branches whose merged PR (from this repo, not a fork) has head.sha equal to the branch tip, so squash-merged branches nobody pushed to since. Never the default branch, protected branches, `release/*` (input `keep`), or a branch that is the head or base of an open PR; the tip is re-read just before each delete. `dry-run` (default true) only writes the candidate table to the job summary. Each deletion logs branch, sha and PR link; restore with `gh api repos/<repo>/git/refs -f ref=refs/heads/<branch> -f sha=<sha>`. Callers run it weekly plus workflow_dispatch with job permissions `contents: write`, `pull-requests: read`. Script and tests: `scripts/branch_cleanup` (`python3 -m unittest discover -s scripts/branch_cleanup`, also run by `pnpm run test:py`).
 - `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
 
 ## This repo's own CI
