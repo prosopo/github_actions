@@ -1,0 +1,35 @@
+# Prints `docker ps -a` and the tail of every container's log, one group per
+# container. Loops `docker ps -aq` rather than `docker compose logs` so
+# containers started by testcontainers or plain `docker run` are covered.
+# Use with `if: ${{ failure() || cancelled() }}`. Logs go to the console only,
+# where Actions masks secrets; never upload them as artifacts, which are not
+# masked. Never fails the job.
+
+name: "container-logs"
+description: "Print docker ps -a and the last lines of every container's log."
+
+inputs:
+  lines:
+    description: "Lines of each container's log to print."
+    required: false
+    default: "200"
+
+runs:
+  using: composite
+  steps:
+    - name: Print container logs
+      shell: bash --noprofile --norc -euo pipefail {0}
+      env:
+        LINES_PER_CONTAINER: ${{ inputs.lines }}
+      run: |
+        if ! command -v docker >/dev/null 2>&1; then
+          echo "docker not installed; no container logs"
+          exit 0
+        fi
+        timeout 30 docker ps -a || true
+        for id in $(timeout 30 docker ps -aq || true); do
+          name=$(timeout 10 docker inspect --format '{{.Name}} ({{.Config.Image}}, {{.State.Status}}, exit {{.State.ExitCode}})' "$id" 2>/dev/null || echo "$id")
+          echo "::group::container ${name#/}"
+          timeout 30 docker logs --tail "$LINES_PER_CONTAINER" "$id" 2>&1 || true
+          echo "::endgroup::"
+        done
