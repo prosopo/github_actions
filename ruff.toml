@@ -5,3 +5,7 @@ line-length = 140
 
 [lint]
 select = ["E", "F", "W", "I", "B", "UP"]
+
+# Inline HTML/CSS templates; wrapping them only obscures the markup.
+[lint.per-file-ignores]
+".github/scripts/ciaudit/render.py" = ["E501"]

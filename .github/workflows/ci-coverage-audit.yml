@@ -1,0 +1,71 @@
+# Weekly CI coverage matrix: for every unit (package, crate, Python project,
+# Dockerfile, ...) in the repos listed in .github/scripts/ciaudit/repos.txt,
+# whether CI builds, lints, typechecks, tests and e2e-tests it, cross-checked
+# against each workflow's latest green run. The HTML matrix and JSON report are
+# the run's artifact; the step summary holds the compact text matrix.
+#
+# Reads other private repos and their run history, which GITHUB_TOKEN cannot,
+# hence PROSOPONATOR_PAT. Read-only: it never writes to any repo.
+
+name: ci-coverage-audit
+
+on:
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.PROSOPONATOR_PAT }}
+      CIAUDIT: .github/scripts/ciaudit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 2
+
+      - name: Install PyYAML
+        run: timeout 2m python3 -m pip install --quiet --user --break-system-packages pyyaml==6.0.3
+        timeout-minutes: 3
+
+      - name: Fetch default-branch snapshots
+        run: timeout 10m python3 "$CIAUDIT/fetch.py" --repos-file "$CIAUDIT/repos.txt" --dest-prefix "$RUNNER_TEMP/snap/"
+        timeout-minutes: 11
+
+      - name: Audit
+        run: |
+          timeout 12m python3 "$CIAUDIT/audit.py" --snap-prefix "$RUNNER_TEMP/snap/" --repos-file "$CIAUDIT/repos.txt" \
+            --mount captcha-private:captcha=captcha --mount captcha-private:protect=Protect \
+            --verify --api-cache "$RUNNER_TEMP/api.json" \
+            --out-json report/ci-coverage.json --out-html report/ci-coverage.html
+        timeout-minutes: 13
+
+      - name: Write summary
+        run: |
+          {
+            echo '## CI coverage'
+            echo 'Columns follow the HTML legend; Y yes, ? unverified, M manual, . no, - n/a, O opt-out.'
+            echo '```'
+            python3 "$CIAUDIT/summary.py" --report report/ci-coverage.json | head -c 900000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        timeout-minutes: 2
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: ci-coverage
+          path: report/
+          retention-days: 30
+        timeout-minutes: 3
