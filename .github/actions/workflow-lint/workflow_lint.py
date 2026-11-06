@@ -10,7 +10,10 @@ cannot come back after each cleanup. Rules (ids usable in waivers):
   pr-types         pull_request lists opened, synchronize, reopened,
                    ready_for_review and converted_to_draft, and each root job
                    (no needs:) skips drafts
-  pr-target        every pull_request_target job has a fork guard
+  no-pr-target     on: does not list pull_request_target, which hands PR runs a
+                   write token and secrets (and, on self-hosted runners, a
+                   persistent machine); use pull_request with permissions:.
+                   Cannot be waived.
   permissions      top-level permissions exist and grant no write; no job is
                    write-all
   allow-dirty      cargo is not run with --allow-dirty
@@ -19,7 +22,7 @@ cannot come back after each cleanup. Rules (ids usable in waivers):
 
 A finding is waived by a comment on its line or the line above:
   # workflow-lint: allow <rule> -- <reason>
-A waiver without a reason is itself a finding.
+A waiver without a reason is itself a finding. Rules in UNWAIVABLE ignore waivers.
 """
 
 import argparse
@@ -35,6 +38,7 @@ WAIVER_RE = re.compile(r"#\s*workflow-lint:\s*allow\s+([a-z-]+)\s*(?:--\s*(.*\S)
 LITERAL_MAIN_RE = re.compile(r"refs/heads/main\b|origin/main\b|['\"]main['\"]")
 SECRET_TO_FILE_RE = re.compile(r"secrets\.[A-Za-z0-9_]+.*(?:>|GITHUB_ENV)")
 ALLOW_DIRTY_RE = re.compile(r"\bcargo\b.*--allow-dirty")
+UNWAIVABLE = {"no-pr-target"}
 
 
 @dataclass(frozen=True)
@@ -117,11 +121,6 @@ def _structural(path: Path, doc: dict) -> list[Finding]:
             if not job.get("needs") and "pull_request.draft" not in str(job.get("if", "")):
                 found.append(Finding(path, job["__line__"], "pr-types", f"job '{job_id}' does not skip draft PRs"))
 
-    if "pull_request_target" in triggers:
-        for job_id, job in jobs.items():
-            if "head.repo" not in str(job.get("if", "")):
-                found.append(Finding(path, job["__line__"], "pr-target", f"job '{job_id}' has no fork guard on pull_request_target"))
-
     perms = doc.get("permissions")
     if perms is None:
         found.append(Finding(path, top, "permissions", "no top-level permissions"))
@@ -144,6 +143,8 @@ def _textual(path: Path, lines: list[str]) -> list[Finding]:
             found.append(Finding(path, n, "allow-dirty", "cargo --allow-dirty"))
         if i not in on and LITERAL_MAIN_RE.search(code):
             found.append(Finding(path, n, "literal-main", "hardcoded main; use github.event.repository.default_branch"))
+        if i in on and "pull_request_target" in code:
+            found.append(Finding(path, n, "no-pr-target", "pull_request_target is banned; use pull_request with permissions:"))
         if SECRET_TO_FILE_RE.search(code):
             found.append(Finding(path, n, "secret-to-file", "secret written to a file or GITHUB_ENV; pass it via env"))
     return found
@@ -172,7 +173,7 @@ def problems(path: Path) -> list[Finding]:
         return []
     waived, bad = _waivers(path, lines)
     found = _structural(path, doc) + _textual(path, lines)
-    return bad + [f for f in found if f.rule not in waived.get(f.line, set())]
+    return bad + [f for f in found if f.rule in UNWAIVABLE or f.rule not in waived.get(f.line, set())]
 
 
 def main(argv: list[str] | None = None) -> int:
