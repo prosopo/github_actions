@@ -108,6 +108,14 @@ class StepTest(unittest.TestCase):
         self.assertEqual(fake.cancelled(), ["repos/o/r/actions/runs/7/cancel"])
         self.assertEqual(fake.updated(), ["1"])
 
+    def test_push_leaves_up_to_date_labelled_pr_running(self) -> None:
+        runs = [{"id": 7, "status": "in_progress"}]
+        fake = FakeGh([pr(1, labels=("auto-update",), checks=[RUNNING]), pr(2)],
+                      states={1: ("MERGEABLE", "BLOCKED")}, runs=runs)
+        self.assertIsNone(updater(fake).step("push", NOW))
+        self.assertEqual(fake.cancelled(), [])
+        self.assertEqual(fake.updated(), [])
+
     def test_schedule_waits_for_labelled_pr_with_running_ci(self) -> None:
         fake = FakeGh([pr(1, labels=("auto-update",), checks=[RUNNING]), pr(2)])
         self.assertIsNone(updater(fake).step("schedule", NOW))
