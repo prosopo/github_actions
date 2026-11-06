@@ -91,10 +91,12 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   node:
+    permissions:
+      contents: read
+      actions: write
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
@@ -218,6 +220,9 @@ jobs:
           restored-fingerprint: ${{ steps.turbo.outputs.fingerprint }}
 
   rust:
+    permissions:
+      contents: read
+      actions: write
     if: ${{ inputs.cargo-command != '' }}
     runs-on: ${{ fromJSON(inputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
