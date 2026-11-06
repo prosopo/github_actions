@@ -34,7 +34,7 @@ class RenderTest(unittest.TestCase):
 
     def test_groups_balanced_and_unset_contexts_skipped(self) -> None:
         out = render({"VARS_CONTEXT": "{}", "INPUTS_CONTEXT": "not json"}, ["npm"], fake_runner)
-        self.assertEqual([l for l in out if l.startswith("::group::")], ["::group::vars", "::group::inputs", "::group::npm"])
+        self.assertEqual([line for line in out if line.startswith("::group::")], ["::group::vars", "::group::inputs", "::group::npm"])
         self.assertEqual(out.count("::endgroup::"), 3)
 
     def test_probe_output_and_unknown_probe(self) -> None:
