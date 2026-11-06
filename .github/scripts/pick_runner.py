@@ -6,8 +6,11 @@ its `labels` output. Precedence, first match wins:
 
   1. fork PR                    -> hosted, always (fork code never reaches our VMs)
   2. `runner` input             -> hosted | self-hosted (auto falls through)
-  3. `runner: <kind>` PR line   -> read from the PR body via the API at run time,
-                                   so an edit applies on the next push or re-run
+  3. `runner: <kind> [wf,...]`  -> PR body line, read via the API at run time so
+                                   an edit applies on the next push or re-run
+                                   (re-runs reuse the old event payload). No list
+                                   means every workflow; the last line that names
+                                   this workflow (or all) with a known kind wins
   4. GH_RUNNER_MAP[<workflow>]  -> repo var, JSON object keyed by workflow file
                                    stem, e.g. {"tests": "self-hosted"}
   5. hosted (ubuntu-latest)
@@ -32,7 +35,7 @@ SELF_HOSTED = "self-hosted"
 KINDS = {HOSTED, SELF_HOSTED}
 HOSTED_LABELS = ["ubuntu-latest"]
 DEFAULT_SELF_HOSTED_LABELS = ["self-hosted", "linux", "x64", "ubuntu-24.04"]
-PR_LINE = re.compile(r"^\s*runner:\s*(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
+PR_LINE = re.compile(r"^[ \t]*runner:[ \t]*(\S+)(?:[ \t]+(\S+))?[ \t]*$", re.IGNORECASE | re.MULTILINE)
 
 Fetch = Callable[[str, int], str]
 
@@ -55,9 +58,18 @@ def workflow_key(workflow_ref: str) -> str:
     return re.sub(r"\.ya?ml$", "", name)
 
 
-def pr_line_kind(body: str | None) -> str | None:
-    match = PR_LINE.search(body or "")
-    return match.group(1).lower() if match else None
+def pr_line_kind(body: str | None, workflow: str, warnings: list[str]) -> str | None:
+    """Kind from the last `runner:` line applying to `workflow`; unknown kinds warn."""
+    kind: str | None = None
+    for match in PR_LINE.finditer(body or ""):
+        value, targets = match.group(1).lower(), match.group(2)
+        if targets and workflow not in {t.strip() for t in targets.split(",") if t.strip()}:
+            continue
+        if value in KINDS:
+            kind = value
+        else:
+            warnings.append(f"PR line '{match.group(0).strip()}' is not hosted|self-hosted; ignored")
+    return kind
 
 
 def decide(
@@ -78,11 +90,9 @@ def decide(
     if requested != "auto":
         warnings.append(f"runner input '{runner_input}' is not auto|hosted|self-hosted; ignored")
 
-    line = pr_line_kind(pr_body)
-    if line in KINDS:
-        return Decision(line, f"'runner: {line}' line in the PR description", warnings)
+    line = pr_line_kind(pr_body, workflow, warnings)
     if line is not None:
-        warnings.append(f"PR line 'runner: {line}' is not hosted|self-hosted; ignored")
+        return Decision(line, f"'runner: {line}' line in the PR description", warnings)
 
     if runner_map.strip():
         try:
