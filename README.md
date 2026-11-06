@@ -90,6 +90,7 @@ Each takes `actions-ref`: pass the same SHA the `uses:` line pins, so the workfl
   ```
 
   Two calls in one run need distinct `workflow` or `concurrency-key` inputs, or they queue behind each other. `ci.yml`'s `selftest-pick-runner` jobs call it as above and check the output shape.
+- `ci-coverage-audit.yml`: weekly (and on dispatch), the CI coverage matrix for every repo in `.github/scripts/ciaudit/repos.txt`: per unit (package, crate, Python project, Dockerfile, ...) whether CI builds, lints, typechecks, tests and e2e-tests it, from a static walk of each triggered workflow (reusable workflows, composite actions, package scripts, turbo tasks) cross-checked against its latest green run. HTML and JSON in the `ci-coverage` artifact, a text matrix in the step summary. A gap that is deliberate goes in `.github/scripts/ciaudit/optouts.json` with its reason. Run locally: `fetch.py --repos-file repos.txt --dest-prefix snap/` then `audit.py --snap-prefix snap/ --repos-file repos.txt --out-json r.json --out-html r.html`; `why.py` prints the evidence behind one unit.
 - `auto-update-pr.yml`: updates one random behind, mergeable, auto-merge PR at a time (`.github/scripts/auto_update_pr.py`).
 
 ## This repo's own CI

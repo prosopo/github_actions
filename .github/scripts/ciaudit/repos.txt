@@ -1,0 +1,15 @@
+captcha
+captcha-private
+chaddy
+docs
+gham
+gh-runner
+.github
+github_actions
+ipinfo-lists
+jsob
+procaptcha-wordpress-plugin
+procaptcha-wordpress-plugin-private
+Protect
+typeshape
+vernon

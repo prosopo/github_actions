@@ -1,0 +1,170 @@
+[
+ {
+  "repo": "typeshape",
+  "unit": "examples/*",
+  "category": "build",
+  "reason": "plain JS run from source; no build step"
+ },
+ {
+  "repo": "typeshape",
+  "unit": "examples/*",
+  "category": "test",
+  "reason": "run by scripts/run-examples.mjs in CI Examples step"
+ },
+ {
+  "repo": "Protect",
+  "unit": ".",
+  "category": "test",
+  "reason": "root holds no code of its own; every package's tests run in test.yml"
+ },
+ {
+  "repo": "Protect",
+  "unit": "fickets/frontend",
+  "category": "typecheck",
+  "reason": "ng build in test.yml compiles with full type-checking"
+ },
+ {
+  "repo": "Protect",
+  "unit": "packages/native-bundle-payload",
+  "category": "test",
+  "reason": "parity.test.mts is run by native-bundle-payload.yml via npx tsx"
+ },
+ {
+  "repo": "Protect",
+  "unit": "scripts",
+  "category": "typecheck",
+  "reason": "imports captcha-private workspace packages that resolve only once that workspace is built; tests run in test.yml"
+ },
+ {
+  "repo": "Protect",
+  "unit": "packages/local-lambda-edge-demo",
+  "category": "typecheck",
+  "reason": "local serverless-offline demo harness; needs a built @prosopo/lambda-edge"
+ },
+ {
+  "repo": "Protect",
+  "unit": "packages/local-lambda-edge-demo",
+  "category": "test",
+  "reason": "local serverless-offline demo harness; needs a built @prosopo/lambda-edge and a Playwright browser"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "ja4/lambda",
+  "category": "typecheck",
+  "reason": "plain JS handler, no TypeScript"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "ja4/lambda",
+  "category": "test",
+  "reason": "deliberately dropped: the handler echoes its event and the test asserted only that (rust.yml header)"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "packages/tailwind-preset",
+  "category": "typecheck",
+  "reason": "plain JS colour data with a hand-written colors.d.ts"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "packages/tailwind-preset",
+  "category": "test",
+  "reason": "colour data only, no logic"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "docker/images/ipinfo",
+  "category": "test",
+  "reason": "image only; linted and built by docker.yml"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "scripts",
+  "category": "typecheck",
+  "reason": "typecheck:scripts reports ~475 errors (352 unresolved unbuilt workspace imports); follow-up filed"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "scripts",
+  "category": "test",
+  "reason": "one-off operational scripts with no test suite"
+ },
+ {
+  "repo": "captcha-private",
+  "unit": "packages/prosopo-website",
+  "category": "typecheck",
+  "reason": "tsc -p reports 48 TS6059 rootDir errors; test:unit runs vitest --typecheck in marketing-website-tests.yml; follow-up filed"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "php-tools/origin-vendors",
+  "category": "lint",
+  "reason": "third-party composer vendors, not project code"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "php-tools/origin-vendors",
+  "category": "test",
+  "reason": "third-party composer vendors, not project code"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "php-tools/scoper",
+  "category": "lint",
+  "reason": "php-scoper tool config; generated prefixing, not project code"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "php-tools/scoper",
+  "category": "test",
+  "reason": "php-scoper tool config; generated prefixing, not project code"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "php-tools/scoper/vendor-bin/php-scoper",
+  "category": "lint",
+  "reason": "vendored php-scoper install"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "php-tools/scoper/vendor-bin/php-scoper",
+  "category": "test",
+  "reason": "vendored php-scoper install"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "prosopo-procaptcha/prefixed-vendors",
+  "category": "lint",
+  "reason": "php-scoper output of third-party vendors"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "prosopo-procaptcha/prefixed-vendors",
+  "category": "test",
+  "reason": "php-scoper output of third-party vendors"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "tests",
+  "category": "build",
+  "reason": "Cypress e2e suite; run by tests.yml run-e2e-tests"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "tests",
+  "category": "lint",
+  "reason": "Cypress e2e suite; specs are exercised by the e2e run"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "tests",
+  "category": "typecheck",
+  "reason": "plain JS Cypress specs"
+ },
+ {
+  "repo": "procaptcha-wordpress-plugin",
+  "unit": "tests",
+  "category": "test",
+  "reason": "is itself the e2e suite (e2e column)"
+ }
+]
