@@ -83,7 +83,7 @@ def _jobs(doc: dict) -> dict:
 
 
 def _on_block(lines: list[str]) -> range:
-    start = next((i for i, l in enumerate(lines) if re.match(r"^['\"]?on['\"]?:", l)), None)
+    start = next((i for i, line in enumerate(lines) if re.match(r"^['\"]?on['\"]?:", line)), None)
     if start is None:
         return range(0)
     end = next((i for i in range(start + 1, len(lines)) if re.match(r"^[A-Za-z_'\"]", lines[i])), len(lines))

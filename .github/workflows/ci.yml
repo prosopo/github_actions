@@ -66,7 +66,7 @@ jobs:
       # repo-wide linters run, since every change under .github/ selects it.
       js-command: pnpm run setup:lint-tools && PATH="$HOME/.local/bin:$PATH" pnpm run lint
       # Fails if the stage left its own .shared-actions checkout in view.
-      python-command: test ! -e .shared-actions && pnpm run lint:py
+      python-command: test ! -e .shared-actions && pnpm run setup:py-tools && pnpm run lint:py
       rust-command: exit 1
       go-command: exit 1
       php-command: exit 1

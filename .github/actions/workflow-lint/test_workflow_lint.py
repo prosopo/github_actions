@@ -117,7 +117,8 @@ class TestNoPrTarget(unittest.TestCase):
         self.assertEqual(rules(text), ["no-pr-target"])
 
     def test_waiver_does_not_exempt(self) -> None:
-        text = COMPLIANT.replace(PR_TRIGGER, PR_TRIGGER + "  # workflow-lint: allow no-pr-target -- needs secrets\n  pull_request_target:\n")
+        waived = "  # workflow-lint: allow no-pr-target -- needs secrets\n  pull_request_target:\n"
+        text = COMPLIANT.replace(PR_TRIGGER, PR_TRIGGER + waived)
         self.assertEqual(rules(text), ["no-pr-target"])
 
     def test_name_outside_on_block_passes(self) -> None:
@@ -176,12 +177,14 @@ class TestWaiver(unittest.TestCase):
     def test_waiver_on_line_above(self) -> None:
         text = COMPLIANT.replace(
             "      - run: echo ok\n  after",
-            "      # workflow-lint: allow allow-dirty -- build writes generated files cargo checks\n      - run: cargo publish --allow-dirty\n  after",
+            "      # workflow-lint: allow allow-dirty -- build writes generated files cargo checks\n"
+            "      - run: cargo publish --allow-dirty\n  after",
         )
         self.assertEqual(rules(text), [])
 
     def test_waiver_on_same_line(self) -> None:
-        text = COMPLIANT.replace("echo ok\n  after", "cargo publish --allow-dirty  # workflow-lint: allow allow-dirty -- generated files\n  after")
+        waived = "cargo publish --allow-dirty  # workflow-lint: allow allow-dirty -- generated files\n  after"
+        text = COMPLIANT.replace("echo ok\n  after", waived)
         self.assertEqual(rules(text), [])
 
     def test_waiver_without_reason_is_a_finding(self) -> None:

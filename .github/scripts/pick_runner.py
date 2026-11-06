@@ -27,8 +27,8 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 HOSTED = "hosted"
 SELF_HOSTED = "self-hosted"
