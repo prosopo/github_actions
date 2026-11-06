@@ -1,0 +1,85 @@
+# Dependabot opens its PRs ready for review, and every suite in the repo then
+# runs on a dependency bump nobody has looked at yet. This converts them to
+# draft the moment they open, so a human deciding the bump is worth testing --
+# "Ready for review" -- is what starts CI. Workflows that skip drafts and list
+# ready_for_review then run everything once it is marked ready.
+#
+# Not GitHub's "Approve and run" button: that is the fork-PR approval setting,
+# and Dependabot branches live in the repository rather than a fork, so it
+# never applies to them.
+#
+# Callers: `on: pull_request: types: [opened, reopened]`, NOT
+# pull_request_target and NOT synchronize. Dependabot force-pushes a rebase
+# whenever the base moves, and re-drafting on synchronize would undo a
+# reviewer's decision every time main advanced. pull_request_target buys
+# nothing: a Dependabot PR gets a read-only token and no repository secrets
+# there too. What a Dependabot-triggered pull_request run can read is a
+# Dependabot secret, so pass PROSOPONATOR_PAT as `token`. This workflow never
+# checks out the PR's code.
+#
+# Caller permissions: `pull-requests: write` (used only when `token` is unset).
+#
+# Pass `token` (a bot PAT): GitHub starts no runs for events a GITHUB_TOKEN
+# causes, so with the fallback the converted_to_draft event never reaches the
+# workflows that cancel their in-flight runs on it, and the suites `opened`
+# started keep running. The PR is still drafted.
+
+name: dependabot-to-draft
+
+on:
+  workflow_call:
+    inputs:
+      concurrency-key:
+        description: "Concurrency group prefix; defaults to the caller's PR."
+        type: string
+        default: ""
+    secrets:
+      token:
+        description: "Bot PAT stored as a Dependabot secret; falls back to github.token."
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ inputs.concurrency-key || 'dependabot-to-draft' }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  draft:
+    # `pull_request.user.login`, not `github.actor`: the actor on a reopen is
+    # whoever reopened it, while the author is the thing that makes this a
+    # Dependabot PR at all.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.draft == false && !contains(github.event.pull_request.labels.*.name, 'keep-ready') }}
+    permissions:
+      contents: read
+      pull-requests: write
+    # Hosted: this exists to free self-hosted capacity and only calls the API.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Convert to draft and say why
+        env:
+          GH_TOKEN: ${{ secrets.token || github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # Comment first, then convert: a PR that goes draft with no
+          # explanation reads as a bug, and if the conversion fails we would
+          # rather have said nothing than explained something that did not
+          # happen. printf, not an indented block scalar, which would carry
+          # its leading whitespace into the posted comment.
+          body=$(printf '%s\n\n%s\n\n%s' \
+            "Opened as a draft so it does not run CI unreviewed. A dependency bump launches every suite in this repo, and most bumps cannot affect any of them." \
+            "Click **Ready for review**, or run \`gh pr ready $PR\`, to run the full set of checks. Add the \`keep-ready\` label to exempt future Dependabot PRs on this repository from this." \
+            "Anything already in flight is cancelled by the conversion: the other workflows trigger on \`converted_to_draft\` and cancel in progress.")
+          timeout 4m gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$body"
+          timeout 4m gh pr ready "$PR" --repo "$GITHUB_REPOSITORY" --undo
+
+          echo "Drafted #$PR"
+        timeout-minutes: 5
