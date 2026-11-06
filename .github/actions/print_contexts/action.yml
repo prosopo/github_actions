@@ -1,9 +1,10 @@
-# Debug aid: prints the workflow contexts as JSON in collapsed groups.
-# SECRETS_CONTEXT is echoed as given (GitHub masks registered secret values,
-# not derived ones), so leave it unset outside debugging.
+# Debug aid: prints the workflow contexts and identity probes in collapsed
+# groups. Contexts go through env, not inlined into the script, so a quote in a
+# value cannot break or inject into the shell. Secrets and env print as names
+# only. Design: README.md.
 
 name: "print_contexts"
-description: "Print the workflow contexts as JSON in collapsed log groups, for debugging."
+description: "Print workflow contexts, secret names and identity/tool probes in collapsed log groups, for debugging."
 
 inputs:
     INPUTS_CONTEXT:
@@ -16,11 +17,15 @@ inputs:
         description: "The vars context as json"
         required: false
     SECRETS_CONTEXT:
-        description: "The secrets context as json"
+        description: "The secrets context as json; only the names are printed, values are masked"
         required: false
     STEPS_CONTEXT:
         description: "The steps context as json"
         required: false
+    probes:
+        description: "Comma-separated probes to run: tools, npm, docker, aws, gh. A failing probe never fails the step."
+        required: false
+        default: "tools"
 
 runs:
     using: "composite"
@@ -28,79 +33,17 @@ runs:
 
       - name: Print contexts
         shell: bash
-        run: |
-            echo "**** github ****"
-            cat <<'EOF'
-            echo "::group::github"
-            echo '${{ toJson(github) }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** env ****"
-            cat <<'EOF'
-            echo "::group::env"
-            echo '${{ toJson(env) }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** vars ****"
-            cat <<'EOF'
-            echo "::group::vars"
-            echo '${{ inputs.VARS_CONTEXT }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** job ****"
-            cat <<'EOF'
-            echo "::group::job"
-            echo '${{ toJson(job) }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** runner ****"
-            cat <<'EOF'
-            echo "::group::runner"
-            echo '${{ toJson(runner) }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** secrets ****"
-            cat <<'EOF'
-            echo "::group::secrets"
-            echo '${{ inputs.SECRETS_CONTEXT }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** strategy ****"
-            cat <<'EOF'
-            echo "::group::strategy"
-            echo '${{ toJson(strategy) }}'
-            EOF
-
-            echo "**** matrix ****"
-            cat <<'EOF'
-            echo "::group::matrix"
-            echo '${{ toJson(matrix) }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** needs ****"
-            cat <<'EOF'
-            echo "::group::needs"
-            echo '${{ inputs.NEEDS_CONTEXT }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** inputs ****"
-            cat <<'EOF'
-            echo "::group::inputs"
-            echo '${{ inputs.INPUTS_CONTEXT }}'
-            echo "::endgroup::"
-            EOF
-
-            echo "**** steps ****"
-            cat <<'EOF'
-            echo "::group::steps"
-            echo '${{ inputs.STEPS_CONTEXT }}'
-            echo "::endgroup::"
-            EOF
+        env:
+            GITHUB_CONTEXT: ${{ toJson(github) }}
+            ENV_CONTEXT: ${{ toJson(env) }}
+            JOB_CONTEXT: ${{ toJson(job) }}
+            RUNNER_CONTEXT: ${{ toJson(runner) }}
+            STRATEGY_CONTEXT: ${{ toJson(strategy) }}
+            MATRIX_CONTEXT: ${{ toJson(matrix) }}
+            VARS_CONTEXT: ${{ inputs.VARS_CONTEXT }}
+            SECRETS_CONTEXT: ${{ inputs.SECRETS_CONTEXT }}
+            NEEDS_CONTEXT: ${{ inputs.NEEDS_CONTEXT }}
+            INPUTS_CONTEXT: ${{ inputs.INPUTS_CONTEXT }}
+            STEPS_CONTEXT: ${{ inputs.STEPS_CONTEXT }}
+            PROBES: ${{ inputs.probes }}
+        run: timeout 150 python3 "$GITHUB_ACTION_PATH/print_contexts.py" --probes "$PROBES" || echo "print_contexts failed; continuing"
