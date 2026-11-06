@@ -46,6 +46,29 @@ def rules(text: str) -> list[str]:
     return [f.rule for f in lint(text)]
 
 
+class TestNodeVersion(unittest.TestCase):
+    STEP = "      - run: echo ok\n"
+
+    def with_step(self, body: str) -> str:
+        return COMPLIANT.replace(self.STEP, "      - uses: actions/setup-node@v6\n        with:\n" + body + self.STEP, 1)
+
+    def test_literal_node_version(self) -> None:
+        self.assertEqual(rules(self.with_step("          node-version: '24.22.1'\n")), ["node-version"])
+
+    def test_bare_number_node_version(self) -> None:
+        self.assertEqual(rules(self.with_step("          node-version: 24\n")), ["node-version"])
+
+    def test_node_version_file_passes(self) -> None:
+        self.assertEqual(rules(self.with_step("          node-version-file: .nvmrc\n")), [])
+
+    def test_matrix_expression_passes(self) -> None:
+        self.assertEqual(rules(self.with_step("          node-version: ${{ matrix.node }}\n")), [])
+
+    def test_waiver(self) -> None:
+        body = "          # workflow-lint: allow node-version -- floor test\n          node-version: '22.12'\n"
+        self.assertEqual(rules(self.with_step(body)), [])
+
+
 class TestCompliant(unittest.TestCase):
     def test_compliant_workflow_has_no_findings(self) -> None:
         self.assertEqual(lint(COMPLIANT), [])

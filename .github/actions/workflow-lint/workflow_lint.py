@@ -16,6 +16,9 @@ cannot come back after each cleanup. Rules (ids usable in waivers):
                    Cannot be waived.
   permissions      top-level permissions exist and grant no write; no job is
                    write-all
+  node-version     no step passes a literal with.node-version; read the repo's
+                   pin with node-version-file so CI and local runs cannot drift
+                   (a matrix value via ${{ matrix.* }} is fine)
   allow-dirty      cargo is not run with --allow-dirty
   literal-main     no hardcoded 'main' ref outside the on: block
   secret-to-file   a secret is not redirected into a file or GITHUB_ENV
@@ -136,6 +139,13 @@ def _structural(path: Path, doc: dict) -> list[Finding]:
     for job_id, job in jobs.items():
         if job.get("permissions") == "write-all":
             found.append(Finding(path, job["__line__"], "permissions", f"job '{job_id}' is write-all"))
+
+    for job in jobs.values():
+        for step in job.get("steps") or []:
+            with_ = step.get("with") if isinstance(step, dict) else None
+            version = with_.get("node-version") if isinstance(with_, dict) else None
+            if version is not None and "${{" not in str(version):
+                found.append(Finding(path, with_["__line__"], "node-version", f"literal node-version {version!r}; use node-version-file"))
     return found
 
 
