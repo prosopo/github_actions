@@ -15,7 +15,7 @@ on:
         type: string
         required: true
       runs-on:
-        description: "Runner label for every job."
+        description: "Runner for every job: a label, or a JSON array of labels (pick-runner output)."
         type: string
         default: "ubuntu-latest"
       timeout-minutes:
@@ -65,7 +65,7 @@ permissions:
 jobs:
   changes:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: 5
     outputs:
       js: ${{ steps.detect.outputs.js-changed }}
@@ -97,7 +97,7 @@ jobs:
   js:
     needs: changes
     if: ${{ needs.changes.outputs.js == 'true' }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -156,7 +156,7 @@ jobs:
   rust:
     needs: changes
     if: ${{ needs.changes.outputs.rust == 'true' }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -197,7 +197,7 @@ jobs:
   python:
     needs: changes
     if: ${{ needs.changes.outputs.python == 'true' }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -238,7 +238,7 @@ jobs:
   go:
     needs: changes
     if: ${{ needs.changes.outputs.go == 'true' }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -276,7 +276,7 @@ jobs:
   php:
     needs: changes
     if: ${{ needs.changes.outputs.php == 'true' }}
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

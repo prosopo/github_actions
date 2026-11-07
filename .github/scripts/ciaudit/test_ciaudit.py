@@ -116,6 +116,9 @@ class DiscoverTest(Fixture):
         self.assertEqual(load_jsonc('{"a": "//x", /* c */ "b": [1,],}'), {"a": "//x", "b": [1]})
         self.assertTrue(in_workspace("packages/a", ["packages/*", "!packages/z"]))
         self.assertFalse(in_workspace("packages/z", ["packages/*", "!packages/z"]))
+        self.assertFalse(in_workspace("captcha/integration/frameworks/vue/wrapper", ["captcha/integration/*"]))
+        self.assertTrue(in_workspace("captcha/integration/frameworks/vue/wrapper", ["captcha/integration/**"]))
+        self.assertTrue(in_workspace("captcha/integration/build-config", ["captcha/integration/*/"]))
 
 
 class ShellTest(unittest.TestCase):

@@ -1,0 +1,60 @@
+# Deletes branches whose PR merged and that nobody has pushed to since. The
+# rule and what is never touched are in .github/scripts/branch_cleanup.py.
+#
+# Callers: `schedule` (weekly) plus `workflow_dispatch`, passing
+# `dry-run: false` only once a dry run's job summary looked right. Caller
+# permissions: `contents: write` (deleting a ref). github.token is enough: a
+# deletion needs no downstream workflow runs.
+
+name: branch-cleanup
+
+on:
+  workflow_call:
+    inputs:
+      actions-ref:
+        description: "Commit of prosopo/github_actions holding the script; pass the SHA this workflow is pinned at."
+        type: string
+        required: true
+      concurrency-key:
+        description: "Concurrency group prefix; defaults to branch-cleanup."
+        type: string
+        default: ""
+      dry-run:
+        description: "List candidates in the job summary without deleting."
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ inputs.concurrency-key || 'branch-cleanup' }}-${{ github.repository }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cleanup:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        timeout-minutes: 5
+        with:
+          repository: prosopo/github_actions
+          ref: ${{ inputs.actions-ref }}
+          path: .shared-actions
+
+      - name: Delete merged, untouched branches
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          timeout 840 python3 .shared-actions/.github/scripts/branch_cleanup.py \
+            --repo "$REPO" --dry-run "$DRY_RUN" --summary-file "$GITHUB_STEP_SUMMARY"
