@@ -150,7 +150,7 @@ class Updater:
                 log("auto_update.release", pr=p.number, failed=ci_failed(p))
                 self.set_label(p.number, False)
                 p.labels.discard(self.label)
-            elif event == "push" and ci_running(p, now, self.max_age):
+            elif event == "push" and ci_running(p, now, self.max_age) and self.merge_state(p.number)[1] == "BEHIND":
                 log("auto_update.restart", pr=p.number, reason="base moved while its CI ran")
                 self.cancel_runs(p)
                 self.update(p)

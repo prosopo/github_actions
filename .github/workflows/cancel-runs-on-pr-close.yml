@@ -24,6 +24,8 @@ name: cancel-runs-on-pr-close
 
 on:
   workflow_call:
+    inputs:
+      runs-on: {description: "Runner: a label, or a JSON array of labels (pick-runner output).", type: string, default: "ubuntu-latest"}
 
 permissions:
   contents: read
@@ -33,7 +35,7 @@ jobs:
     permissions:
       actions: write
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}

@@ -23,6 +23,7 @@ name: auto-update-pr
 on:
   workflow_call:
     inputs:
+      runs-on: {description: "Runner: a label, or a JSON array of labels (pick-runner output).", type: string, default: "ubuntu-latest"}
       actions-ref:
         description: "Commit of prosopo/github_actions holding the script; pass the SHA this workflow is pinned at (see cache-main.yml)."
         type: string
@@ -47,7 +48,7 @@ permissions:
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(startsWith(inputs.runs-on, '[') && inputs.runs-on || toJSON(inputs.runs-on)) }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
